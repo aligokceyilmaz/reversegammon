@@ -11,7 +11,7 @@ import Svg, {
   Stop,
   Text as SvgText,
 } from 'react-native-svg';
-import type { GameState } from '../engine';
+import type { GameState, Player } from '../engine';
 import { colors } from './theme';
 
 interface Props {
@@ -24,6 +24,9 @@ interface Props {
   selectedPoint: number | null;
   /** Seçili kaynaktan gidilebilecek hedef haneler */
   destPoints: ReadonlySet<number>;
+  /** Sıradaki oyuncunun eldeki (bardaki) pulları oynanabilir mi / seçili mi */
+  handIsSource: boolean;
+  handSelected: boolean;
 }
 
 /**
@@ -31,7 +34,8 @@ interface Props {
  * alt kenardan içeri bakar, bar dikey ortadadır. Dikey ekranda tahta uzar,
  * hane genişliği ekrana göre ölçeklenir (klasik mobil tavla görünümü).
  * Alt sıra 0-11 (sağdan sola, Beyaz girişi sağ-alt), üst sıra 12-23
- * (soldan sağa, Siyah girişi sağ-üst).
+ * (soldan sağa, Siyah girişi sağ-üst). Oyuna girmemiş pullar barın
+ * üzerinde bekler: Beyaz'ınki alt yarıda, Siyah'ınki üst yarıda.
  */
 export function boardGeometry(width: number, height: number) {
   const fp = 10; // çerçeve kalınlığı
@@ -42,6 +46,7 @@ export function boardGeometry(width: number, height: number) {
   const r = Math.min(pw * 0.46, 30); // pul yarıçapı
   const triLen = innerH * 0.4;
   const halfLen = innerH / 2 - 4;
+  const barX = fp + 6 * pw; // barın sol kenarı
 
   /** Şeridin (sütunun) x merkezi (bar atlanır) */
   const laneC = (lane: number) => fp + lane * pw + (lane >= 6 ? barW : 0) + pw / 2;
@@ -77,19 +82,84 @@ export function boardGeometry(width: number, height: number) {
     return y < height / 2 ? 12 + lane : 11 - lane;
   }
 
+  /** Barın üzerindeki el destesi bölgesi: hangi oyuncunun? (değilse null) */
+  function barZoneAt(x: number, y: number): Player | null {
+    if (x < barX - pw * 0.2 || x > barX + barW + pw * 0.2) return null;
+    if (y < fp || y > height - fp) return null;
+    return y >= height / 2 ? 0 : 1;
+  }
+
   return {
     fp,
     innerW,
     innerH,
     pw,
     barW,
+    barX,
     r,
     triLen,
     halfLen,
     laneC,
     pointGeom,
     pointAt,
+    barZoneAt,
   };
+}
+
+/** Tornalanmış ahşap pul (gölge + gövde + oyuk merkez) */
+function Checker({
+  cx,
+  cy,
+  r,
+  player,
+  ringColor,
+  ringWidth,
+  dimmed,
+  keyPrefix,
+}: {
+  cx: number;
+  cy: number;
+  r: number;
+  player: Player;
+  ringColor?: string;
+  ringWidth?: number;
+  dimmed?: boolean;
+  keyPrefix: string;
+}) {
+  const w = player === 0;
+  return (
+    <React.Fragment key={keyPrefix}>
+      <Ellipse
+        cx={cx + 1.2}
+        cy={cy + 2.2}
+        rx={r * 1.0}
+        ry={r * 0.92}
+        fill="#000"
+        opacity={0.3}
+      />
+      <Circle
+        cx={cx}
+        cy={cy}
+        r={r}
+        fill={w ? 'url(#chW)' : 'url(#chB)'}
+        stroke={ringColor ?? (w ? '#8F7345' : '#1C0E06')}
+        strokeWidth={ringWidth ?? 1.2}
+      />
+      {/* Torna izi halka */}
+      <Circle
+        cx={cx}
+        cy={cy}
+        r={r * 0.72}
+        fill="none"
+        stroke={w ? '#B99B6B' : '#6B4630'}
+        strokeWidth={1}
+        opacity={0.85}
+      />
+      {/* Oyuk (çukur) merkez */}
+      <Circle cx={cx} cy={cy} r={r * 0.45} fill={w ? 'url(#chWdip)' : 'url(#chBdip)'} />
+      {dimmed && <Circle cx={cx} cy={cy} r={r} fill="#000" opacity={0.16} />}
+    </React.Fragment>
+  );
 }
 
 export function BoardSvg({
@@ -99,23 +169,21 @@ export function BoardSvg({
   sourcePoints,
   selectedPoint,
   destPoints,
+  handIsSource,
+  handSelected,
 }: Props) {
   const geo = boardGeometry(width, height);
-  const { fp, innerW, innerH, pw, barW, r, triLen, halfLen } = geo;
+  const { fp, innerW, innerH, pw, barW, barX, r, triLen, halfLen } = geo;
 
   const triangles: React.ReactNode[] = [];
   const checkers: React.ReactNode[] = [];
-  const destGlows: React.ReactNode[] = []; // pulların altında
-  const destDots: React.ReactNode[] = []; // pulların üstünde
+  const destGlows: React.ReactNode[] = [];
+  const destDots: React.ReactNode[] = [];
 
   for (let i = 0; i < 24; i++) {
-    const { bx, by, dx, dy, lane } = geo.pointGeom(i);
-    // Üçgenin taban kenarı (kenara dik yönde pw genişliğinde)
-    const px = Math.abs(dy); // perpendicular birim vektör
-    const py = Math.abs(dx);
-    const tipX = bx + dx * triLen;
+    const { bx, by, dy, lane } = geo.pointGeom(i);
     const tipY = by + dy * triLen;
-    const triPts = `${bx - px * (pw / 2)},${by - py * (pw / 2)} ${bx + px * (pw / 2)},${by + py * (pw / 2)} ${tipX},${tipY}`;
+    const triPts = `${bx - pw / 2},${by} ${bx + pw / 2},${by} ${bx},${tipY}`;
     const isDest = destPoints.has(i);
     const isSource = sourcePoints.has(i);
     const isSelected = selectedPoint === i;
@@ -126,101 +194,50 @@ export function BoardSvg({
         key={`t${i}`}
         points={triPts}
         fill={light ? 'url(#triLight)' : 'url(#triDark)'}
-        stroke="#00000030"
+        stroke="#00000038"
         strokeWidth={1}
       />,
     );
 
     if (isDest) {
       destGlows.push(
-        <Polygon key={`d${i}`} points={triPts} fill={colors.dest} opacity={0.45} />,
+        <Polygon key={`d${i}`} points={triPts} fill={colors.dest} opacity={0.42} />,
       );
     }
 
-    // Pul kulesi: dizinin başı hanenin dibinde, sonu (en üst pul) ortaya doğru
     const stack = state.points[i];
     const n = stack.length;
     const step = n <= 1 ? 0 : Math.min(r * 1.9, (halfLen - 2 * r) / (n - 1));
     stack.forEach((p, k) => {
-      const cx = bx + dx * (r + 4 + k * step);
       const cy = by + dy * (r + 4 + k * step);
       const isTop = k === n - 1;
-      // Zemine düşen yumuşak gölge
       checkers.push(
-        <Ellipse
-          key={`sh${i}-${k}`}
-          cx={cx + 1.5}
-          cy={cy + 2.5}
-          rx={r * 1.0}
-          ry={r * 0.92}
-          fill="#000"
-          opacity={0.28}
-        />,
-      );
-      checkers.push(
-        <Circle
+        <Checker
           key={`c${i}-${k}`}
-          cx={cx}
+          keyPrefix={`c${i}-${k}`}
+          cx={bx}
           cy={cy}
           r={r}
-          fill={p === 0 ? 'url(#chW)' : 'url(#chB)'}
-          stroke={
+          player={p}
+          dimmed={!isTop}
+          ringColor={
             isTop && isSelected
               ? colors.highlight
               : isTop && isSource
                 ? colors.dest
-                : p === 0
-                  ? '#8A7B58'
-                  : '#0D1418'
+                : undefined
           }
-          strokeWidth={isTop && (isSource || isSelected) ? 3.5 : 1.2}
+          ringWidth={isTop && (isSource || isSelected) ? 3.5 : undefined}
         />,
       );
-      // Tornalanmış iç halkalar
-      checkers.push(
-        <Circle
-          key={`ci${i}-${k}`}
-          cx={cx}
-          cy={cy}
-          r={r * 0.66}
-          fill="none"
-          stroke={p === 0 ? '#B5A578' : '#5C707B'}
-          strokeWidth={1.2}
-          opacity={0.8}
-        />,
-      );
-      checkers.push(
-        <Circle
-          key={`ci2${i}-${k}`}
-          cx={cx}
-          cy={cy}
-          r={r * 0.4}
-          fill={p === 0 ? 'url(#chWc)' : 'url(#chBc)'}
-          opacity={0.9}
-        />,
-      );
-      // Altta kalan (kilitli/örtülü) pullar hafif gölgelensin
-      if (!isTop) {
-        checkers.push(
-          <Circle
-            key={`cd${i}-${k}`}
-            cx={cx}
-            cy={cy}
-            r={r}
-            fill="#000"
-            opacity={0.16}
-          />,
-        );
-      }
     });
 
-    // Hedef hanede iniş noktası işareti
     if (isDest) {
       const off = Math.min(r + 4 + n * step + (n > 0 ? r * 0.4 : 0), halfLen);
       destDots.push(
         <Circle
           key={`dd${i}`}
-          cx={bx + dx * off}
+          cx={bx}
           cy={by + dy * off}
           r={r * 0.45}
           fill={colors.dest}
@@ -231,12 +248,62 @@ export function BoardSvg({
     }
   }
 
+  // Bar üzerindeki el desteleri: Beyaz alt yarıda, Siyah üst yarıda
+  const barC = barX + barW / 2;
+  const rb = Math.min(barW * 0.44, r);
+  const handStacks: React.ReactNode[] = [];
+  for (const p of [0, 1] as const) {
+    const count = state.hand[p];
+    if (count === 0) continue;
+    const avail = innerH / 2 - 26;
+    const step = count <= 1 ? 0 : Math.min(rb * 0.6, (avail - 2 * rb) / (count - 1));
+    const startY = p === 0 ? height - fp - rb - 4 : fp + rb + 4;
+    const dirY = p === 0 ? -1 : 1;
+    const isTurn = state.turn === p;
+    for (let k = 0; k < count; k++) {
+      const cy = startY + dirY * k * step;
+      const isTop = k === count - 1;
+      handStacks.push(
+        <Checker
+          key={`h${p}-${k}`}
+          keyPrefix={`h${p}-${k}`}
+          cx={barC}
+          cy={cy}
+          r={rb}
+          player={p}
+          ringColor={
+            isTop && isTurn && handSelected
+              ? colors.highlight
+              : isTop && isTurn && handIsSource
+                ? colors.dest
+                : undefined
+          }
+          ringWidth={isTop && isTurn && (handIsSource || handSelected) ? 3 : undefined}
+        />,
+      );
+    }
+    // Deste sayacı
+    handStacks.push(
+      <SvgText
+        key={`hc${p}`}
+        x={barC}
+        y={p === 0 ? height / 2 + 18 : height / 2 - 12}
+        fontSize={10}
+        fontWeight="bold"
+        fill={colors.text}
+        textAnchor="middle"
+        opacity={0.9}
+      >
+        {count}
+      </SvgText>,
+    );
+  }
+
   // Giriş bölgesi numaraları (her oyuncunun kendi 1-6'sı)
   const labels: React.ReactNode[] = [];
   for (let d = 1; d <= 6; d++) {
     for (const pl of [0, 1] as const) {
-      const idx = pl === 0 ? d - 1 : 24 - d;
-      const g = geo.pointGeom(idx);
+      const g = geo.pointGeom(pl === 0 ? d - 1 : 24 - d);
       labels.push(
         <SvgText
           key={`l${pl}-${d}`}
@@ -252,57 +319,99 @@ export function BoardSvg({
     }
   }
 
-  // Orta bar konumu (dikey şerit)
-  const barRect = { x: fp + 6 * pw, y: fp, w: barW, h: innerH };
+  // Pirinç menteşeler (bar üzerinde, ortada)
+  const hinges = [height / 2].map((hy, idx) => (
+    <React.Fragment key={`hinge${idx}`}>
+      <Rect
+        x={barC - barW * 0.28}
+        y={hy - 7}
+        width={barW * 0.56}
+        height={14}
+        rx={2}
+        fill="url(#brassGrad)"
+        stroke="#7A5D12"
+        strokeWidth={0.8}
+      />
+      <Circle cx={barC} cy={hy - 3.5} r={1.2} fill="#7A5D12" />
+      <Circle cx={barC} cy={hy + 3.5} r={1.2} fill="#7A5D12" />
+    </React.Fragment>
+  ));
+
+  // Ahşap damar çizgileri (çok hafif)
+  const grains: React.ReactNode[] = [];
+  for (let gi = 0; gi < 10; gi++) {
+    const gx = fp + (innerW / 10) * gi + (gi % 3) * 4;
+    grains.push(
+      <Rect
+        key={`g${gi}`}
+        x={gx}
+        y={fp}
+        width={1.2}
+        height={innerH}
+        fill={gi % 2 === 0 ? '#000' : '#FFF'}
+        opacity={0.035}
+      />,
+    );
+  }
 
   return (
     <View style={{ width, height }} pointerEvents="none">
       <Svg width={width} height={height}>
         <Defs>
           <LinearGradient id="wood" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor="#6B4A38" />
-            <Stop offset="0.5" stopColor="#573C2E" />
-            <Stop offset="1" stopColor="#3E2723" />
+            <Stop offset="0" stopColor="#5A3F27" />
+            <Stop offset="0.5" stopColor="#46311D" />
+            <Stop offset="1" stopColor="#33220F" />
           </LinearGradient>
-          <LinearGradient id="felt" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor="#7A5949" />
-            <Stop offset="1" stopColor="#5D4037" />
+          <LinearGradient id="felt" x1="0" y1="0" x2="0.9" y2="1">
+            <Stop offset="0" stopColor="#8A6845" />
+            <Stop offset="0.5" stopColor="#7A5A3C" />
+            <Stop offset="1" stopColor="#684A2E" />
           </LinearGradient>
           <LinearGradient id="barGrad" x1="0" y1="0" x2="1" y2="0">
-            <Stop offset="0" stopColor="#2E1D18" />
-            <Stop offset="0.5" stopColor="#4E342E" />
-            <Stop offset="1" stopColor="#2E1D18" />
+            <Stop offset="0" stopColor="#33220F" />
+            <Stop offset="0.5" stopColor="#5A4128" />
+            <Stop offset="1" stopColor="#33220F" />
           </LinearGradient>
-          <LinearGradient id="triLight" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor="#E2D6CC" />
-            <Stop offset="1" stopColor="#C4B2A4" />
+          <LinearGradient id="brassGrad" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor="#E8C95A" />
+            <Stop offset="0.5" stopColor="#C9A227" />
+            <Stop offset="1" stopColor="#8F6E14" />
           </LinearGradient>
-          <LinearGradient id="triDark" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor="#AB8E7E" />
-            <Stop offset="1" stopColor="#8C7264" />
+          <LinearGradient id="triLight" x1="0" y1="0" x2="0.3" y2="1">
+            <Stop offset="0" stopColor="#F2E4BE" />
+            <Stop offset="1" stopColor="#D9C393" />
           </LinearGradient>
-          <RadialGradient id="chW" cx="0.35" cy="0.32" r="0.9">
-            <Stop offset="0" stopColor="#FFFEF8" />
-            <Stop offset="0.6" stopColor="#F0E7CF" />
-            <Stop offset="1" stopColor="#CBBB92" />
+          <LinearGradient id="triDark" x1="0" y1="0" x2="0.3" y2="1">
+            <Stop offset="0" stopColor="#9C4A28" />
+            <Stop offset="1" stopColor="#7A3418" />
+          </LinearGradient>
+          {/* Krem akçaağaç pul */}
+          <RadialGradient id="chW" cx="0.35" cy="0.3" r="0.95">
+            <Stop offset="0" stopColor="#FBF0D2" />
+            <Stop offset="0.6" stopColor="#EAD8B2" />
+            <Stop offset="1" stopColor="#C3A272" />
           </RadialGradient>
-          <RadialGradient id="chWc" cx="0.4" cy="0.35" r="1">
-            <Stop offset="0" stopColor="#FBF6E8" />
-            <Stop offset="1" stopColor="#D8C9A2" />
+          <RadialGradient id="chWdip" cx="0.5" cy="0.55" r="0.8">
+            <Stop offset="0" stopColor="#CDB183" />
+            <Stop offset="0.7" stopColor="#E2CD9F" />
+            <Stop offset="1" stopColor="#F3E5C2" />
           </RadialGradient>
-          <RadialGradient id="chB" cx="0.35" cy="0.32" r="0.9">
-            <Stop offset="0" stopColor="#7C8F9B" />
-            <Stop offset="0.55" stopColor="#46545C" />
-            <Stop offset="1" stopColor="#1C262C" />
+          {/* Koyu ceviz pul */}
+          <RadialGradient id="chB" cx="0.35" cy="0.3" r="0.95">
+            <Stop offset="0" stopColor="#7C5138" />
+            <Stop offset="0.6" stopColor="#4A2E20" />
+            <Stop offset="1" stopColor="#2A160B" />
           </RadialGradient>
-          <RadialGradient id="chBc" cx="0.4" cy="0.35" r="1">
-            <Stop offset="0" stopColor="#5D707B" />
-            <Stop offset="1" stopColor="#2A363D" />
+          <RadialGradient id="chBdip" cx="0.5" cy="0.55" r="0.8">
+            <Stop offset="0" stopColor="#2E1A0E" />
+            <Stop offset="0.7" stopColor="#4A2E20" />
+            <Stop offset="1" stopColor="#5F3D28" />
           </RadialGradient>
         </Defs>
         <Rect x={0} y={0} width={width} height={height} rx={12} fill="url(#wood)" />
         <Rect x={fp} y={fp} width={innerW} height={innerH} fill="url(#felt)" />
-        {/* İç kenar gölgesi */}
+        {grains}
         <Rect
           x={fp}
           y={fp}
@@ -312,17 +421,12 @@ export function BoardSvg({
           stroke="#00000055"
           strokeWidth={3}
         />
-        {/* Orta bar */}
-        <Rect
-          x={barRect.x}
-          y={barRect.y}
-          width={barRect.w}
-          height={barRect.h}
-          fill="url(#barGrad)"
-        />
+        <Rect x={barX} y={fp} width={barW} height={innerH} fill="url(#barGrad)" />
         {triangles}
         {destGlows}
         {checkers}
+        {hinges}
+        {handStacks}
         {destDots}
         {labels}
       </Svg>

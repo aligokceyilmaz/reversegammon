@@ -7,7 +7,6 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import type { GestureResponderHandlers } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   applyMove,
@@ -68,7 +67,7 @@ export function GameScreen({ onExit }: Props) {
   const bannerH = 26;
   // Dikeyde paneller üstte/altta yatay şerit, yatayda solda/sağda dikey sütun
   const panelW = Math.max(92, Math.min(width * 0.15, 140));
-  const panelH = Math.max(88, Math.min(height * 0.14, 118));
+  const panelH = Math.max(64, Math.min(height * 0.11, 92));
   const boardW = portrait
     ? width - padL - padR
     : width - padL - padR - panelW * 2 - gap * 2;
@@ -230,6 +229,19 @@ export function GameScreen({ onExit }: Props) {
         const pt = u.geo.pointAt(locationX, locationY);
         dragRef.current = null;
         if (pt === null) {
+          // Bar üzerindeki el destesine mi basıldı?
+          const zone = u.geo.barZoneAt(locationX, locationY);
+          if (zone !== null && zone === u.game.turn && u.handIsSource) {
+            dragRef.current = {
+              source: { kind: 'hand' },
+              pending: null,
+              moved: false,
+              wasSelected: u.selected?.kind === 'hand',
+            };
+            setSelected({ kind: 'hand' });
+            setDragPos({ x: pageX, y: pageY });
+            return;
+          }
           setSelected(null);
           return;
         }
@@ -293,54 +305,6 @@ export function GameScreen({ onExit }: Props) {
       },
     }),
   ).current;
-
-  /** El tepsisinden dokunma + sürükleme (oyuncuya özel) */
-  function makeHandPan(player: Player) {
-    return PanResponder.create({
-      onStartShouldSetPanResponder: () => {
-        const u = ui.current;
-        return (
-          u.phase === 'playing' &&
-          u.game.turn === player &&
-          u.game.rolled !== null &&
-          u.handIsSource
-        );
-      },
-      onPanResponderGrant: (evt) => {
-        const wasSelected = ui.current.selected?.kind === 'hand';
-        dragRef.current = {
-          source: { kind: 'hand' },
-          pending: null,
-          moved: false,
-          wasSelected,
-        };
-        setSelected({ kind: 'hand' });
-        setDragPos({ x: evt.nativeEvent.pageX, y: evt.nativeEvent.pageY });
-      },
-      onPanResponderMove: (_evt, gs) => {
-        const d = dragRef.current;
-        if (!d) return;
-        if (!d.moved && Math.abs(gs.dx) + Math.abs(gs.dy) > 5) d.moved = true;
-        setDragPos({ x: gs.moveX, y: gs.moveY });
-      },
-      onPanResponderRelease: (_evt, gs) => {
-        const d = dragRef.current;
-        dragRef.current = null;
-        setDragPos(null);
-        if (!d) return;
-        if (!d.moved) {
-          if (d.wasSelected) setSelected(null);
-          return;
-        }
-        if (d.source) handleDrop(gs.moveX, gs.moveY, d.source);
-      },
-      onPanResponderTerminate: () => {
-        dragRef.current = null;
-        setDragPos(null);
-      },
-    });
-  }
-  const handPans = useRef([makeHandPan(0), makeHandPan(1)]).current;
 
   // Tur sonu: tüm zarlar oynandıysa kısa bekleme sonrası sıra geçer
   useEffect(() => {
@@ -453,8 +417,6 @@ export function GameScreen({ onExit }: Props) {
               width={portrait ? boardW : panelW}
               height={portrait ? panelH : undefined}
               isTurn={game.turn === p && phase === 'playing'}
-              handIsSource={handIsSource && game.turn === p}
-              handSelected={selected?.kind === 'hand' && game.turn === p}
               offActive={!!offOption && game.turn === p}
               canUndo={undoStack.length > 0}
               mustPass={mustPass}
@@ -462,7 +424,6 @@ export function GameScreen({ onExit }: Props) {
               onUndo={doUndo}
               onPass={doPass}
               onOff={() => onPressOff(p)}
-              handPanHandlers={handPans[p].panHandlers}
               onOffLayout={(rect) => (offRects.current[p] = rect)}
             />
           );
@@ -479,6 +440,8 @@ export function GameScreen({ onExit }: Props) {
                 sourcePoints={sourcePointSet}
                 selectedPoint={selected?.kind === 'point' ? selected.point! : null}
                 destPoints={destPointSet}
+                handIsSource={handIsSource}
+                handSelected={selected?.kind === 'hand'}
               />
             </View>
           );
@@ -604,8 +567,6 @@ interface PanelProps {
   width: number;
   height?: number;
   isTurn: boolean;
-  handIsSource: boolean;
-  handSelected: boolean;
   offActive: boolean;
   canUndo: boolean;
   mustPass: boolean;
@@ -613,7 +574,6 @@ interface PanelProps {
   onUndo: () => void;
   onPass: () => void;
   onOff: () => void;
-  handPanHandlers: GestureResponderHandlers;
   onOffLayout: (rect: Rect) => void;
 }
 
@@ -625,8 +585,6 @@ function PlayerPanel({
   width,
   height,
   isTurn,
-  handIsSource,
-  handSelected,
   offActive,
   canUndo,
   mustPass,
@@ -634,7 +592,6 @@ function PlayerPanel({
   onUndo,
   onPass,
   onOff,
-  handPanHandlers,
   onOffLayout,
 }: PanelProps) {
   const checkerColor = player === 0 ? colors.whiteChecker : colors.blackChecker;
@@ -643,7 +600,7 @@ function PlayerPanel({
   const handCount = game.hand[player];
 
   const dice = isTurn && phase === 'playing' && (
-    <View style={styles.controls}>
+    <View style={horizontal ? styles.controlsRow : styles.controls}>
       {game.rolled ? (
         <View style={styles.diceRow}>
           {game.rolled.map((v, i) => {
@@ -680,33 +637,6 @@ function PlayerPanel({
           <Text style={styles.ghostBtnText}>↩ Geri Al</Text>
         </Pressable>
       )}
-    </View>
-  );
-
-  const handTray = (
-    <View
-      {...handPanHandlers}
-      style={[
-        styles.tray,
-        horizontal ? styles.handTrayH : styles.handTray,
-        handIsSource && styles.traySource,
-        handSelected && styles.traySelected,
-      ]}
-    >
-      <Text style={styles.trayLabel}>Elde · {handCount}</Text>
-      <View style={styles.handStack}>
-        {Array.from({ length: handCount }, (_, i) => (
-          <View
-            key={i}
-            style={[
-              styles.handChecker,
-              i > 0 && styles.handCheckerOverlap,
-              { backgroundColor: checkerColor, borderColor: edge },
-            ]}
-          />
-        ))}
-        {handCount === 0 && <Text style={styles.trayEmpty}>—</Text>}
-      </View>
     </View>
   );
 
@@ -755,12 +685,12 @@ function PlayerPanel({
             <View style={[styles.turnDot, { backgroundColor: checkerColor }]} />
             <Text style={styles.panelName}>{PLAYER_NAMES[player]}</Text>
           </View>
-          {handTray}
+          {handCount > 0 && (
+            <Text style={styles.handCountText}>Elde {handCount}</Text>
+          )}
         </View>
-        <View style={styles.panelHRight}>
-          {offTray}
-          {dice}
-        </View>
+        {dice}
+        <View style={styles.panelHRight}>{offTray}</View>
       </View>
     );
   }
@@ -771,7 +701,9 @@ function PlayerPanel({
         <View style={[styles.turnDot, { backgroundColor: checkerColor }]} />
         <Text style={styles.panelName}>{PLAYER_NAMES[player]}</Text>
       </View>
-      {handTray}
+      {handCount > 0 && (
+        <Text style={styles.handCountText}>Elde {handCount} pul (barda)</Text>
+      )}
       {offTray}
       <View style={styles.panelSpacer} />
       {dice}
@@ -852,8 +784,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: 4,
   },
-  handTrayH: {
-    alignSelf: 'stretch',
+  handCountText: {
+    color: colors.textDim,
+    fontSize: 11,
   },
   panelHeader: {
     flexDirection: 'row',
@@ -934,6 +867,12 @@ const styles = StyleSheet.create({
   },
   controls: {
     gap: 8,
+  },
+  controlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 1,
   },
   diceRow: {
     flexDirection: 'row',
