@@ -4,6 +4,7 @@ import {
   canBearOff,
   canLand,
   cloneState,
+  destinationOptions,
   endTurn,
   entryPoint,
   legalMoves,
@@ -281,6 +282,100 @@ describe('toplama ve kazanma', () => {
     expect(
       find(moves, (m) => m.type === 'bearoff' && m.from === 2),
     ).toBeTruthy();
+  });
+});
+
+describe('kombine zar hedefleri (destinationOptions)', () => {
+  it('6-4 atınca aynı pul için +4, +6 ve +10 hedefleri sunulur', () => {
+    let state = setup({ turn: 0, stacks: { 8: [0] } });
+    state.hand[0] = 0;
+    state.borneOff[0] = TOTAL_CHECKERS - 1;
+    state = rollDice(state, 6, 4);
+    const dests = destinationOptions(state, { kind: 'point', point: 8 }).map(
+      (o) => o.dest,
+    );
+    expect(dests).toContain(12); // +4
+    expect(dests).toContain(14); // +6
+    expect(dests).toContain(18); // +10
+  });
+
+  it('kombine hedefin ara durağı kapalıysa diğer sıra denenir', () => {
+    // 8+6=14 kapalı, 8+4=12 açık → +10 hedefi 4-sonra-6 yoluyla bulunmalı
+    let state = setup({ turn: 0, stacks: { 8: [0], 14: [1, 1] } });
+    state.hand[0] = 0;
+    state.borneOff[0] = TOTAL_CHECKERS - 1;
+    state = rollDice(state, 6, 4);
+    const opts = destinationOptions(state, { kind: 'point', point: 8 });
+    const to18 = opts.find((o) => o.dest === 18);
+    expect(to18).toBeTruthy();
+    expect(to18!.moves.map((m) => m.die)).toEqual([4, 6]);
+    expect(opts.some((o) => o.dest === 14)).toBe(false); // kapalı hane hedef değil
+  });
+
+  it('1-1 çiftinde aynı pul 4 adıma kadar ilerleyebilir', () => {
+    let state = setup({ turn: 0, stacks: { 8: [0] } });
+    state.hand[0] = 0;
+    state.borneOff[0] = TOTAL_CHECKERS - 1;
+    state = rollDice(state, 1, 1);
+    const dests = destinationOptions(state, { kind: 'point', point: 8 }).map(
+      (o) => o.dest,
+    );
+    expect(dests).toEqual(expect.arrayContaining([9, 10, 11, 12]));
+  });
+
+  it('elden yerleştir + ilerlet kombinasyonu da hedeflenir', () => {
+    let state = setup({ turn: 0 });
+    state = rollDice(state, 5, 2);
+    const opts = destinationOptions(state, { kind: 'hand' });
+    const dests = opts.map((o) => o.dest);
+    expect(dests).toContain(4); // 5'e koy
+    expect(dests).toContain(1); // 2'ye koy
+    expect(dests).toContain(6); // 5'e koy + 2 ilerlet (veya 2'ye koy + 5)
+    const to6 = opts.find((o) => o.dest === 6)!;
+    expect(to6.moves[0].type).toBe('place');
+    expect(to6.moves.length).toBe(2);
+  });
+
+  it('hedef dizisi uygulanınca pul kombine hedefe ulaşır', () => {
+    let state = setup({ turn: 0, stacks: { 8: [0] } });
+    state.hand[0] = 0;
+    state.borneOff[0] = TOTAL_CHECKERS - 1;
+    state = rollDice(state, 6, 4);
+    const to18 = destinationOptions(state, { kind: 'point', point: 8 }).find(
+      (o) => o.dest === 18,
+    )!;
+    for (const m of to18.moves) state = applyMove(state, m);
+    expect(state.points[18]).toEqual([0]);
+    expect(state.dice).toEqual([]);
+  });
+});
+
+describe('toplama: kilitli pul engel olmaz (klasik mantık)', () => {
+  it('zar, serbest en uzak puldan büyükse kilitli daha uzak pul olsa da toplanır', () => {
+    // Beyaz: idx19'da kilitli (dist 5, üstünde siyah), idx20 serbest (dist 4)
+    let state = setup({ turn: 0, stacks: { 19: [0, 1], 20: [0] } });
+    state.hand[0] = 0;
+    state.borneOff[0] = TOTAL_CHECKERS - 2;
+    state = rollDice(state, 5, 5);
+    const moves = legalMoves(state);
+    expect(
+      moves.find((m) => m.type === 'bearoff' && m.from === 20),
+    ).toBeTruthy();
+  });
+
+  it('1-4 hanelerinde pul varken 5-5 ile en uzaktakiler sırayla toplanır', () => {
+    // Siyah: idx 0,1,2,3 (dist 1..4), 5-5 → 4 kez en uzaktan toplanmalı
+    let state = setup({ turn: 1, stacks: { 0: [1], 1: [1], 2: [1], 3: [1] } });
+    state.hand[1] = 0;
+    state.borneOff[1] = TOTAL_CHECKERS - 4;
+    state = rollDice(state, 5, 5);
+    for (let k = 0; k < 4; k++) {
+      const moves = legalMoves(state);
+      const bo = moves.find((m) => m.type === 'bearoff');
+      expect(bo).toBeTruthy();
+      state = applyMove(state, bo!);
+    }
+    expect(state.winner).toBe(1);
   });
 });
 

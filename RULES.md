@@ -42,6 +42,6 @@ Bir zarın götürdüğü hedef haneye oynanabilme koşulları:
 ## Toplama (Bear-off) ve Kazanma
 
 - Amaç: 15 pulun tamamını karşı tarafa (rakibin başlangıç bölgesi olan son 6 haneye) ulaştırmak ve oradan toplamak.
-- Toplama, klasik tavladaki gibi işler: **15 pulun tamamı** son bölgeye ulaşmadan (ve elde pul kalmamışken) toplama başlayamaz. Zarın gösterdiği hanedeki pul toplanır; zar hanedeki en uzak puldan büyükse en uzak hanedeki pul toplanabilir.
-- Kilitli bir pul toplanamaz; üstü boşalana kadar bekler.
+- Toplama, klasik tavladaki gibi işler: **15 pulun tamamı** son bölgeye ulaşmadan (ve elde pul kalmamışken) toplama başlayamaz. Zarın gösterdiği hanedeki pul toplanır; zar en uzak **serbest** puldan büyükse en uzaktaki serbest pul toplanabilir (örn. pullar 1-4 hanelerindeyken 5-5 gelirse en uzaktakiler sırayla toplanır).
+- Kilitli bir pul toplanamaz; üstü boşalana kadar bekler. Kilitli pul, diğer pulların toplanmasına engel değildir.
 - **15 pulunu ilk toplayan oyuncu oyunu kazanır.**

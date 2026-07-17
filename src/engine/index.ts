@@ -71,11 +71,16 @@ export function canBearOff(state: GameState, p: Player): boolean {
   return true;
 }
 
-/** Oyuncunun toplama kenarına en uzak pulunun mesafesi (kilitliler dahil) */
-function maxDistance(state: GameState, p: Player): number {
+/**
+ * Oyuncunun toplama kenarına en uzak SERBEST (en üstte, oynayabilir) pulunun
+ * mesafesi. Kilitli pullar sayılmaz: zar en uzak serbest puldan büyükse o pul
+ * toplanabilir (klasik tavla mantığı; kilitli pul toplamayı kilitlemesin).
+ */
+function maxMovableDistance(state: GameState, p: Player): number {
   let max = 0;
   for (let i = 0; i < 24; i++) {
-    if (state.points[i].includes(p)) {
+    const st = state.points[i];
+    if (st.length > 0 && st[st.length - 1] === p) {
       max = Math.max(max, distanceToOff(p, i));
     }
   }
@@ -159,11 +164,11 @@ function rawMoves(state: GameState): Move[] {
 
     // 3) Toplama
     if (canBearOff(state, p)) {
-      const maxDist = maxDistance(state, p);
+      const maxDist = maxMovableDistance(state, p);
       for (let i = 0; i < 24; i++) {
         if (!inHomeZone(p, i) || !topIsPlayers(state, p, i)) continue;
         const dist = distanceToOff(p, i);
-        // Tam zar; ya da zar en uzak puldan büyükse en uzaktaki serbest pul
+        // Tam zar; ya da zar en uzak serbest puldan büyükse en uzaktaki serbest pul
         if (dist === die || (die > maxDist && dist === maxDist)) {
           moves.push({ type: 'bearoff', die, from: i });
         }
@@ -294,6 +299,44 @@ export function movesFrom(state: GameState, source: MoveSource): Move[] {
       ? m.type === 'place'
       : m.type !== 'place' && m.from === source.point,
   );
+}
+
+/**
+ * Bir kaynaktan AYNI pulla ulaşılabilen tüm hedefler; ardışık zar
+ * kombinasyonları dahil (6-4 → +6, +4 ve +10; çiftte 4 adıma kadar).
+ * Her hedef için oynanacak hamle dizisi verilir; en kısa dizi tercih edilir.
+ */
+export interface DestOption {
+  dest: number | 'off';
+  moves: Move[];
+}
+
+export function destinationOptions(
+  state: GameState,
+  source: MoveSource,
+): DestOption[] {
+  const best = new Map<number | 'off', Move[]>();
+
+  function add(dest: number | 'off', seq: Move[]) {
+    const cur = best.get(dest);
+    if (!cur || seq.length < cur.length) best.set(dest, seq);
+  }
+
+  function walk(s: GameState, src: MoveSource, seq: Move[]) {
+    for (const m of movesFrom(s, src)) {
+      const nseq = [...seq, m];
+      if (m.type === 'bearoff') {
+        add('off', nseq);
+        continue;
+      }
+      add(m.to, nseq);
+      // Aynı pul kalan zarlarla devam edebilir
+      walk(applyMove(s, m), { kind: 'point', point: m.to }, nseq);
+    }
+  }
+
+  walk(state, source, []);
+  return [...best.entries()].map(([dest, moves]) => ({ dest, moves }));
 }
 
 export function randomDie(): number {
