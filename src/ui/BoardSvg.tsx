@@ -27,26 +27,23 @@ interface Props {
 }
 
 /**
- * Tahta geometrisi — yön bağımsız. Yatayda üçgenler alt/üst kenardan,
- * dikeyde sağ/sol kenardan içeri bakar. Çizim ve dokunma aynı hesabı kullanır.
- *
- * Dikey dizilim: sağ sütun alttan üste 0-11 (Beyaz girişi sağ-alt),
- * sol sütun üstten alta 12-23 (Siyah girişi sol-alt).
+ * Tahta geometrisi — klasik tavla duruşu her zaman korunur: üçgenler üst ve
+ * alt kenardan içeri bakar, bar dikey ortadadır. Dikey ekranda tahta uzar,
+ * hane genişliği ekrana göre ölçeklenir (klasik mobil tavla görünümü).
+ * Alt sıra 0-11 (sağdan sola, Beyaz girişi sağ-alt), üst sıra 12-23
+ * (soldan sağa, Siyah girişi sağ-üst).
  */
 export function boardGeometry(width: number, height: number) {
-  const portrait = height > width;
   const fp = 10; // çerçeve kalınlığı
   const innerW = width - fp * 2;
   const innerH = height - fp * 2;
-  const laneAxis = portrait ? innerH : innerW; // 12 hane + bar bu eksende
-  const depthAxis = portrait ? innerW : innerH; // üçgen uzunluğu bu eksende
-  const pw = laneAxis / 13;
+  const pw = innerW / 13; // 12 hane + bar
   const barW = pw;
   const r = Math.min(pw * 0.46, 30); // pul yarıçapı
-  const triLen = depthAxis * 0.42;
-  const halfLen = depthAxis / 2 - 4;
+  const triLen = innerH * 0.4;
+  const halfLen = innerH / 2 - 4;
 
-  /** Uzun eksende şeridin merkezi (bar atlanır) */
+  /** Şeridin (sütunun) x merkezi (bar atlanır) */
   const laneC = (lane: number) => fp + lane * pw + (lane >= 6 ? barW : 0) + pw / 2;
 
   /** Hane → kenar noktası ve içe doğru birim yön */
@@ -57,26 +54,13 @@ export function boardGeometry(width: number, height: number) {
     dy: number;
     lane: number;
   } {
-    if (!portrait) {
-      // Alt sıra 0-11 (sağdan sola), üst sıra 12-23 (soldan sağa)
-      const bottom = i < 12;
-      const lane = bottom ? 11 - i : i - 12;
-      return {
-        bx: laneC(lane),
-        by: bottom ? height - fp : fp,
-        dx: 0,
-        dy: bottom ? -1 : 1,
-        lane,
-      };
-    }
-    // Dikey: sağ sütun 0-11 (alttan üste), sol sütun 12-23 (üstten alta)
-    const right = i < 12;
-    const lane = right ? 11 - i : i - 12;
+    const bottom = i < 12;
+    const lane = bottom ? 11 - i : i - 12;
     return {
-      bx: right ? width - fp : fp,
-      by: laneC(lane),
-      dx: right ? -1 : 1,
-      dy: 0,
+      bx: laneC(lane),
+      by: bottom ? height - fp : fp,
+      dx: 0,
+      dy: bottom ? -1 : 1,
       lane,
     };
   }
@@ -84,20 +68,16 @@ export function boardGeometry(width: number, height: number) {
   /** Tahta-yerel koordinat → hane indeksi (bar/dışarısı: null) */
   function pointAt(x: number, y: number): number | null {
     if (x < fp || x > width - fp || y < fp || y > height - fp) return null;
-    const along = (portrait ? y : x) - fp;
+    const along = x - fp;
     let lane: number;
     if (along < 6 * pw) lane = Math.floor(along / pw);
     else if (along < 6 * pw + barW) return null; // orta bar
     else lane = 6 + Math.floor((along - 6 * pw - barW) / pw);
     if (lane < 0 || lane > 11) return null;
-    if (!portrait) {
-      return y < height / 2 ? 12 + lane : 11 - lane;
-    }
-    return x >= width / 2 ? 11 - lane : 12 + lane;
+    return y < height / 2 ? 12 + lane : 11 - lane;
   }
 
   return {
-    portrait,
     fp,
     innerW,
     innerH,
@@ -121,7 +101,7 @@ export function BoardSvg({
   destPoints,
 }: Props) {
   const geo = boardGeometry(width, height);
-  const { portrait, fp, innerW, innerH, pw, barW, r, triLen, halfLen } = geo;
+  const { fp, innerW, innerH, pw, barW, r, triLen, halfLen } = geo;
 
   const triangles: React.ReactNode[] = [];
   const checkers: React.ReactNode[] = [];
@@ -257,13 +237,11 @@ export function BoardSvg({
     for (const pl of [0, 1] as const) {
       const idx = pl === 0 ? d - 1 : 24 - d;
       const g = geo.pointGeom(idx);
-      const lx = portrait ? (g.dx > 0 ? 5 : width - 5) : g.bx;
-      const ly = portrait ? g.by + 3 : g.dy > 0 ? 8 : height - 3;
       labels.push(
         <SvgText
           key={`l${pl}-${d}`}
-          x={lx}
-          y={ly}
+          x={g.bx}
+          y={g.dy > 0 ? 8 : height - 3}
           fontSize={8}
           fill={colors.textDim}
           textAnchor="middle"
@@ -274,10 +252,8 @@ export function BoardSvg({
     }
   }
 
-  // Orta bar konumu
-  const barRect = portrait
-    ? { x: fp, y: fp + 6 * pw, w: innerW, h: barW }
-    : { x: fp + 6 * pw, y: fp, w: barW, h: innerH };
+  // Orta bar konumu (dikey şerit)
+  const barRect = { x: fp + 6 * pw, y: fp, w: barW, h: innerH };
 
   return (
     <View style={{ width, height }} pointerEvents="none">
@@ -292,7 +268,7 @@ export function BoardSvg({
             <Stop offset="0" stopColor="#7A5949" />
             <Stop offset="1" stopColor="#5D4037" />
           </LinearGradient>
-          <LinearGradient id="barGrad" x1="0" y1="0" x2={portrait ? '0' : '1'} y2={portrait ? '1' : '0'}>
+          <LinearGradient id="barGrad" x1="0" y1="0" x2="1" y2="0">
             <Stop offset="0" stopColor="#2E1D18" />
             <Stop offset="0.5" stopColor="#4E342E" />
             <Stop offset="1" stopColor="#2E1D18" />

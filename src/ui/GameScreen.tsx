@@ -188,18 +188,10 @@ export function GameScreen({ onExit }: Props) {
     for (const o of opts) {
       if (o.dest === 'off') continue;
       const pg = g.pointGeom(o.dest as number);
-      // Bırakılan nokta hedefin yarısında mı? (içe bakış yönüne göre)
-      const sideOk = g.portrait
-        ? pg.dx < 0
-          ? local.x > bw * 0.4
-          : local.x < bw * 0.6
-        : pg.dy < 0
-          ? local.y > bh * 0.4
-          : local.y < bh * 0.6;
+      // Bırakılan nokta hedefin yarısında mı? (alt sıra hedefi için alt yarı vb.)
+      const sideOk = pg.dy < 0 ? local.y > bh * 0.4 : local.y < bh * 0.6;
       if (!sideOk) continue;
-      const dist = g.portrait
-        ? Math.abs(local.y - pg.by)
-        : Math.abs(local.x - pg.bx);
+      const dist = Math.abs(local.x - pg.bx);
       if (dist < bestDist) {
         bestDist = dist;
         best = o;
