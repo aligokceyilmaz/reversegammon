@@ -58,6 +58,7 @@ export function GameScreen({ onExit }: Props) {
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
 
   // --- Boyutlar (çentik/safe-area dahil, küçük ekranlara sığacak şekilde) ---
+  const portrait = height > width;
   const pad = 6;
   const gap = 6;
   const padL = pad + insets.left;
@@ -65,9 +66,15 @@ export function GameScreen({ onExit }: Props) {
   const padT = pad + insets.top;
   const padB = pad + insets.bottom;
   const bannerH = 26;
+  // Dikeyde paneller üstte/altta yatay şerit, yatayda solda/sağda dikey sütun
   const panelW = Math.max(92, Math.min(width * 0.15, 140));
-  const boardW = width - padL - padR - panelW * 2 - gap * 2;
-  const boardH = height - padT - padB - bannerH - gap;
+  const panelH = Math.max(88, Math.min(height * 0.14, 118));
+  const boardW = portrait
+    ? width - padL - padR
+    : width - padL - padR - panelW * 2 - gap * 2;
+  const boardH = portrait
+    ? height - padT - padB - bannerH - panelH * 2 - gap * 2
+    : height - padT - padB - bannerH - gap;
   const geo = boardGeometry(boardW, boardH);
 
   const legal = useMemo(
@@ -129,7 +136,9 @@ export function GameScreen({ onExit }: Props) {
 
   // Tahtanın pencere içi konumu kendi yerleşimimizden bilinir
   // (measureInWindow web'de çalışmadığı için hesapla)
-  const boardOrigin = { x: padL + panelW + gap, y: padT + bannerH };
+  const boardOrigin = portrait
+    ? { x: padL, y: padT + bannerH + panelH + gap }
+    : { x: padL + panelW + gap, y: padT + bannerH };
   const boardOriginRef = useRef(boardOrigin);
   boardOriginRef.current = boardOrigin;
   const offRects = useRef<[Rect | null, Rect | null]>([null, null]);
@@ -159,9 +168,10 @@ export function GameScreen({ onExit }: Props) {
     const u = ui.current;
     const opts = destinationOptions(u.game, source);
     const g = u.geo;
+    const bw = g.innerW + 2 * g.fp;
     const bh = g.innerH + 2 * g.fp;
     const local = {
-      x: pageX - boardOriginRef.current.x,
+      x: Math.min(Math.max(pageX - boardOriginRef.current.x, 0), bw),
       y: Math.min(Math.max(pageY - boardOriginRef.current.y, 0), bh),
     };
     const pt = g.pointAt(local.x, local.y);
@@ -174,21 +184,28 @@ export function GameScreen({ onExit }: Props) {
     if (source.kind === 'point' && pt === source.point) return;
     // Tam üstüne denk gelmediyse: en yakın geçerli hedefe "mıknatıs" gibi oturt
     let best: DestOption | null = null;
-    let bestDx = Infinity;
+    let bestDist = Infinity;
     for (const o of opts) {
       if (o.dest === 'off') continue;
-      const i = o.dest as number;
-      const row = i < 12 ? 'bottom' : 'top';
-      const col = i < 12 ? 11 - i : i - 12;
-      const rowOk = row === 'top' ? local.y < bh * 0.6 : local.y > bh * 0.4;
-      if (!rowOk) continue;
-      const dx = Math.abs(local.x - g.colX(col));
-      if (dx < bestDx) {
-        bestDx = dx;
+      const pg = g.pointGeom(o.dest as number);
+      // Bırakılan nokta hedefin yarısında mı? (içe bakış yönüne göre)
+      const sideOk = g.portrait
+        ? pg.dx < 0
+          ? local.x > bw * 0.4
+          : local.x < bw * 0.6
+        : pg.dy < 0
+          ? local.y > bh * 0.4
+          : local.y < bh * 0.6;
+      if (!sideOk) continue;
+      const dist = g.portrait
+        ? Math.abs(local.y - pg.by)
+        : Math.abs(local.x - pg.bx);
+      if (dist < bestDist) {
+        bestDist = dist;
         best = o;
       }
     }
-    if (best && bestDx < g.pw * 1.2) {
+    if (best && bestDist < g.pw * 1.2) {
       doApplyRef.current(best);
       return;
     }
@@ -432,53 +449,52 @@ export function GameScreen({ onExit }: Props) {
         <Text style={styles.menuBtn}> </Text>
       </View>
 
-      <View style={styles.row}>
-        <PlayerPanel
-          player={0}
-          game={game}
-          phase={phase}
-          width={panelW}
-          isTurn={game.turn === 0 && phase === 'playing'}
-          handIsSource={handIsSource && game.turn === 0}
-          handSelected={selected?.kind === 'hand' && game.turn === 0}
-          offActive={!!offOption && game.turn === 0}
-          canUndo={undoStack.length > 0}
-          mustPass={mustPass}
-          onRoll={doRoll}
-          onUndo={doUndo}
-          onPass={doPass}
-          onOff={() => onPressOff(0)}
-          handPanHandlers={handPans[0].panHandlers}
-          onOffLayout={(rect) => (offRects.current[0] = rect)}
-        />
-        <View style={{ width: boardW, height: boardH }} {...boardPan.panHandlers}>
-          <BoardSvg
-            state={game}
-            width={boardW}
-            height={boardH}
-            sourcePoints={sourcePointSet}
-            selectedPoint={selected?.kind === 'point' ? selected.point! : null}
-            destPoints={destPointSet}
-          />
-        </View>
-        <PlayerPanel
-          player={1}
-          game={game}
-          phase={phase}
-          width={panelW}
-          isTurn={game.turn === 1 && phase === 'playing'}
-          handIsSource={handIsSource && game.turn === 1}
-          handSelected={selected?.kind === 'hand' && game.turn === 1}
-          offActive={!!offOption && game.turn === 1}
-          canUndo={undoStack.length > 0}
-          mustPass={mustPass}
-          onRoll={doRoll}
-          onUndo={doUndo}
-          onPass={doPass}
-          onOff={() => onPressOff(1)}
-          handPanHandlers={handPans[1].panHandlers}
-          onOffLayout={(rect) => (offRects.current[1] = rect)}
-        />
+      <View style={portrait ? styles.col : styles.row}>
+        {(() => {
+          const panelFor = (p: Player) => (
+            <PlayerPanel
+              key={`p${p}`}
+              player={p}
+              game={game}
+              phase={phase}
+              horizontal={portrait}
+              width={portrait ? boardW : panelW}
+              height={portrait ? panelH : undefined}
+              isTurn={game.turn === p && phase === 'playing'}
+              handIsSource={handIsSource && game.turn === p}
+              handSelected={selected?.kind === 'hand' && game.turn === p}
+              offActive={!!offOption && game.turn === p}
+              canUndo={undoStack.length > 0}
+              mustPass={mustPass}
+              onRoll={doRoll}
+              onUndo={doUndo}
+              onPass={doPass}
+              onOff={() => onPressOff(p)}
+              handPanHandlers={handPans[p].panHandlers}
+              onOffLayout={(rect) => (offRects.current[p] = rect)}
+            />
+          );
+          const board = (
+            <View
+              key="board"
+              style={{ width: boardW, height: boardH }}
+              {...boardPan.panHandlers}
+            >
+              <BoardSvg
+                state={game}
+                width={boardW}
+                height={boardH}
+                sourcePoints={sourcePointSet}
+                selectedPoint={selected?.kind === 'point' ? selected.point! : null}
+                destPoints={destPointSet}
+              />
+            </View>
+          );
+          // Dikeyde: Siyah üstte, tahta ortada, Beyaz altta
+          return portrait
+            ? [panelFor(1), board, panelFor(0)]
+            : [panelFor(0), board, panelFor(1)];
+        })()}
       </View>
 
       {/* Sürüklenen pul */}
@@ -592,7 +608,9 @@ interface PanelProps {
   player: Player;
   game: GameState;
   phase: Phase;
+  horizontal: boolean;
   width: number;
+  height?: number;
   isTurn: boolean;
   handIsSource: boolean;
   handSelected: boolean;
@@ -611,7 +629,9 @@ function PlayerPanel({
   player,
   game,
   phase,
+  horizontal,
   width,
+  height,
   isTurn,
   handIsSource,
   handSelected,
@@ -630,108 +650,139 @@ function PlayerPanel({
   const offRef = useRef<View>(null);
   const handCount = game.hand[player];
 
+  const dice = isTurn && phase === 'playing' && (
+    <View style={styles.controls}>
+      {game.rolled ? (
+        <View style={styles.diceRow}>
+          {game.rolled.map((v, i) => {
+            const remaining = game.dice.filter((d) => d === v).length;
+            const used =
+              game.rolled![0] === game.rolled![1]
+                ? i >= remaining
+                : !game.dice.includes(v);
+            return <Die key={i} value={v} size={34} dimmed={used} />;
+          })}
+          {game.rolled[0] === game.rolled[1] && (
+            <Text style={styles.doubleText}>×4 ({game.dice.length})</Text>
+          )}
+        </View>
+      ) : (
+        <Pressable style={styles.primaryBtn} onPress={onRoll}>
+          <Text style={styles.primaryBtnText}>🎲 Zar At</Text>
+        </Pressable>
+      )}
+
+      {mustPass && (
+        <Pressable
+          style={[styles.primaryBtn, { backgroundColor: colors.danger }]}
+          onPress={onPass}
+        >
+          <Text style={styles.primaryBtnText}>
+            {canUndo ? 'Zar oynanamıyor' : 'Hamle yok — Pas'}
+          </Text>
+        </Pressable>
+      )}
+
+      {canUndo && !mustPass && (
+        <Pressable style={styles.ghostBtn} onPress={onUndo}>
+          <Text style={styles.ghostBtnText}>↩ Geri Al</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+
+  const handTray = (
+    <View
+      {...handPanHandlers}
+      style={[
+        styles.tray,
+        horizontal ? styles.handTrayH : styles.handTray,
+        handIsSource && styles.traySource,
+        handSelected && styles.traySelected,
+      ]}
+    >
+      <Text style={styles.trayLabel}>Elde · {handCount}</Text>
+      <View style={styles.handStack}>
+        {Array.from({ length: handCount }, (_, i) => (
+          <View
+            key={i}
+            style={[
+              styles.handChecker,
+              i > 0 && styles.handCheckerOverlap,
+              { backgroundColor: checkerColor, borderColor: edge },
+            ]}
+          />
+        ))}
+        {handCount === 0 && <Text style={styles.trayEmpty}>—</Text>}
+      </View>
+    </View>
+  );
+
+  const offTray = (
+    <Pressable
+      ref={offRef}
+      onPress={onOff}
+      onLayout={() =>
+        requestAnimationFrame(() =>
+          offRef.current?.measureInWindow((x, y, w, h) =>
+            onOffLayout({ x, y, w, h }),
+          ),
+        )
+      }
+      style={[styles.tray, offActive && styles.trayOffActive]}
+    >
+      <Text style={styles.trayLabel}>Toplanan</Text>
+      <View style={styles.trayRow}>
+        <View
+          style={[
+            styles.miniChecker,
+            { backgroundColor: checkerColor, borderColor: edge },
+          ]}
+        />
+        <Text style={styles.trayCount}>
+          ×{game.borneOff[player]}
+          <Text style={styles.trayTotal}>/{TOTAL_CHECKERS}</Text>
+        </Text>
+      </View>
+    </Pressable>
+  );
+
+  if (horizontal) {
+    // Dikey ekranda üst/alt yatay şerit
+    return (
+      <View
+        style={[
+          styles.panel,
+          styles.panelH,
+          { width, height },
+          isTurn && styles.panelActive,
+        ]}
+      >
+        <View style={styles.panelHLeft}>
+          <View style={styles.panelHeader}>
+            <View style={[styles.turnDot, { backgroundColor: checkerColor }]} />
+            <Text style={styles.panelName}>{PLAYER_NAMES[player]}</Text>
+          </View>
+          {handTray}
+        </View>
+        <View style={styles.panelHRight}>
+          {offTray}
+          {dice}
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.panel, { width }, isTurn && styles.panelActive]}>
       <View style={styles.panelHeader}>
         <View style={[styles.turnDot, { backgroundColor: checkerColor }]} />
         <Text style={styles.panelName}>{PLAYER_NAMES[player]}</Text>
       </View>
-
-      {/* Eldeki pullar: dizili tepsi, sürüklenebilir */}
-      <View
-        {...handPanHandlers}
-        style={[
-          styles.tray,
-          styles.handTray,
-          handIsSource && styles.traySource,
-          handSelected && styles.traySelected,
-        ]}
-      >
-        <Text style={styles.trayLabel}>Elde · {handCount}</Text>
-        <View style={styles.handStack}>
-          {Array.from({ length: handCount }, (_, i) => (
-            <View
-              key={i}
-              style={[
-                styles.handChecker,
-                i > 0 && styles.handCheckerOverlap,
-                { backgroundColor: checkerColor, borderColor: edge },
-              ]}
-            />
-          ))}
-          {handCount === 0 && <Text style={styles.trayEmpty}>—</Text>}
-        </View>
-      </View>
-
-      <Pressable
-        ref={offRef}
-        onPress={onOff}
-        onLayout={() =>
-          requestAnimationFrame(() =>
-            offRef.current?.measureInWindow((x, y, w, h) =>
-              onOffLayout({ x, y, w, h }),
-            ),
-          )
-        }
-        style={[styles.tray, offActive && styles.trayOffActive]}
-      >
-        <Text style={styles.trayLabel}>Toplanan</Text>
-        <View style={styles.trayRow}>
-          <View
-            style={[
-              styles.miniChecker,
-              { backgroundColor: checkerColor, borderColor: edge },
-            ]}
-          />
-          <Text style={styles.trayCount}>
-            ×{game.borneOff[player]}
-            <Text style={styles.trayTotal}>/{TOTAL_CHECKERS}</Text>
-          </Text>
-        </View>
-      </Pressable>
-
+      {handTray}
+      {offTray}
       <View style={styles.panelSpacer} />
-
-      {isTurn && phase === 'playing' && (
-        <View style={styles.controls}>
-          {game.rolled ? (
-            <View style={styles.diceRow}>
-              {game.rolled.map((v, i) => {
-                const remaining = game.dice.filter((d) => d === v).length;
-                const used =
-                  game.rolled![0] === game.rolled![1]
-                    ? i >= remaining
-                    : !game.dice.includes(v);
-                return <Die key={i} value={v} size={34} dimmed={used} />;
-              })}
-              {game.rolled[0] === game.rolled[1] && (
-                <Text style={styles.doubleText}>×4 ({game.dice.length})</Text>
-              )}
-            </View>
-          ) : (
-            <Pressable style={styles.primaryBtn} onPress={onRoll}>
-              <Text style={styles.primaryBtnText}>🎲 Zar At</Text>
-            </Pressable>
-          )}
-
-          {mustPass && (
-            <Pressable
-              style={[styles.primaryBtn, { backgroundColor: colors.danger }]}
-              onPress={onPass}
-            >
-              <Text style={styles.primaryBtnText}>
-                {canUndo ? 'Zar oynanamıyor — Devam' : 'Hamle yok — Pas'}
-              </Text>
-            </Pressable>
-          )}
-
-          {canUndo && !mustPass && (
-            <Pressable style={styles.ghostBtn} onPress={onUndo}>
-              <Text style={styles.ghostBtnText}>↩ Geri Al</Text>
-            </Pressable>
-          )}
-        </View>
-      )}
+      {dice}
     </View>
   );
 }
@@ -778,6 +829,12 @@ const styles = StyleSheet.create({
     gap: 6,
     alignItems: 'stretch',
   },
+  col: {
+    flex: 1,
+    flexDirection: 'column',
+    gap: 6,
+    alignItems: 'center',
+  },
   panel: {
     backgroundColor: colors.frame,
     borderRadius: 10,
@@ -788,6 +845,23 @@ const styles = StyleSheet.create({
   },
   panelActive: {
     borderColor: colors.accent,
+  },
+  panelH: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  panelHLeft: {
+    flex: 1,
+    gap: 4,
+  },
+  panelHRight: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  handTrayH: {
+    alignSelf: 'stretch',
   },
   panelHeader: {
     flexDirection: 'row',
