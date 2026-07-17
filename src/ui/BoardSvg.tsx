@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
 import Svg, { Circle, Polygon, Rect, Text as SvgText } from 'react-native-svg';
 import type { GameState } from '../engine';
 import { colors } from './theme';
@@ -14,12 +14,41 @@ interface Props {
   selectedPoint: number | null;
   /** Seçili kaynaktan gidilebilecek hedef haneler */
   destPoints: ReadonlySet<number>;
-  onPressPoint: (point: number) => void;
 }
 
 /** Hane indeksi → görsel konum. Alt sıra: 0-11 (sağdan sola), üst sıra: 12-23 (soldan sağa) */
 function pointToGrid(i: number): { row: 'top' | 'bottom'; col: number } {
   return i < 12 ? { row: 'bottom', col: 11 - i } : { row: 'top', col: i - 12 };
+}
+
+/**
+ * Tahta geometrisi: çizim ile dokunma/sürükleme aynı hesabı kullansın diye
+ * hem BoardSvg hem GameScreen buradan besleniyor.
+ */
+export function boardGeometry(width: number, height: number) {
+  const fp = 10; // çerçeve kalınlığı
+  const innerW = width - fp * 2;
+  const innerH = height - fp * 2;
+  const pw = innerW / 13; // 12 hane + 1 bar genişliği
+  const barW = pw;
+  const r = Math.min(pw * 0.46, 26); // pul yarıçapı
+  const triLen = innerH * 0.42;
+  const halfLen = innerH / 2 - 4;
+  const colX = (col: number) => fp + col * pw + (col >= 6 ? barW : 0) + pw / 2;
+
+  /** Tahta-yerel koordinat → hane indeksi (bar/dışarısı: null) */
+  function pointAt(x: number, y: number): number | null {
+    if (x < fp || x > width - fp || y < fp || y > height - fp) return null;
+    const xi = x - fp;
+    let col: number;
+    if (xi < 6 * pw) col = Math.floor(xi / pw);
+    else if (xi < 6 * pw + barW) return null; // orta bar
+    else col = 6 + Math.floor((xi - 6 * pw - barW) / pw);
+    if (col < 0 || col > 11) return null;
+    return y < height / 2 ? 12 + col : 11 - col;
+  }
+
+  return { fp, innerW, innerH, pw, barW, r, triLen, halfLen, colX, pointAt };
 }
 
 export function BoardSvg({
@@ -29,24 +58,14 @@ export function BoardSvg({
   sourcePoints,
   selectedPoint,
   destPoints,
-  onPressPoint,
 }: Props) {
-  const fp = 10; // çerçeve kalınlığı
-  const innerW = width - fp * 2;
-  const innerH = height - fp * 2;
-  const pw = innerW / 13; // 12 hane + 1 bar genişliği
-  const barW = pw;
-  const r = Math.min(pw * 0.46, 26); // pul yarıçapı
-  const triLen = innerH * 0.42;
-  const halfLen = innerH / 2 - 4;
-
-  const colX = (col: number) => fp + col * pw + (col >= 6 ? barW : 0) + pw / 2;
+  const { fp, innerW, innerH, pw, barW, r, triLen, halfLen, colX } =
+    boardGeometry(width, height);
 
   const triangles: React.ReactNode[] = [];
   const checkers: React.ReactNode[] = [];
   const destGlows: React.ReactNode[] = []; // pulların altında
   const destDots: React.ReactNode[] = []; // pulların üstünde
-  const touch: React.ReactNode[] = [];
 
   for (let i = 0; i < 24; i++) {
     const { row, col } = pointToGrid(i);
@@ -131,20 +150,6 @@ export function BoardSvg({
       );
     }
 
-    // Dokunma alanı: SVG onPress web'de çalışmadığı için üstte Pressable katmanı
-    touch.push(
-      <Pressable
-        key={`h${i}`}
-        onPress={() => onPressPoint(i)}
-        style={{
-          position: 'absolute',
-          left: cx - pw / 2,
-          top: row === 'bottom' ? height / 2 : fp,
-          width: pw,
-          height: innerH / 2,
-        }}
-      />,
-    );
   }
 
   // Giriş bölgesi numaraları (her oyuncunun kendi 1-6'sı, sağ yarıda)
@@ -179,7 +184,7 @@ export function BoardSvg({
   }
 
   return (
-    <View style={{ width, height }}>
+    <View style={{ width, height }} pointerEvents="none">
       <Svg width={width} height={height}>
         <Rect x={0} y={0} width={width} height={height} rx={10} fill={colors.frame} />
         <Rect x={fp} y={fp} width={innerW} height={innerH} fill={colors.felt} />
@@ -191,7 +196,6 @@ export function BoardSvg({
         {destDots}
         {labels}
       </Svg>
-      {touch}
     </View>
   );
 }
