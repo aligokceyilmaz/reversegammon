@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Animated,
   PanResponder,
   Pressable,
   StyleSheet,
@@ -22,6 +23,7 @@ import {
 } from '../engine';
 import type { DestOption, GameState, MoveSource, Player } from '../engine';
 import { chooseMove } from '../engine/ai';
+import { recordAiResult } from '../profile';
 import { BoardSvg, boardGeometry } from './BoardSvg';
 import { Die } from './Dice';
 import { AI_NAME, colors, PLAYER_NAMES } from './theme';
@@ -52,6 +54,7 @@ interface Props {
 
 /** AI her zaman Siyah (oyuncu 1) olarak oynar */
 const AI_PLAYER: Player = 1;
+const EMPTY_POINTS: ReadonlySet<number> = new Set();
 
 export function GameScreen({ mode, onExit }: Props) {
   const { width, height } = useWindowDimensions();
@@ -62,6 +65,18 @@ export function GameScreen({ mode, onExit }: Props) {
   const [undoStack, setUndoStack] = useState<GameState[]>([]);
   const [selected, setSelected] = useState<MoveSource | null>(null);
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
+  /** Zar atılınca ortada beliren popup */
+  const [rollPopup, setRollPopup] = useState<{
+    dice: [number, number];
+    player: Player;
+    key: number;
+  } | null>(null);
+  /** AI'nın oynamak üzere olduğu hamlenin vurgusu */
+  const [aiPreview, setAiPreview] = useState<{
+    src: MoveSource;
+    dest: number | 'off';
+  } | null>(null);
+  const recordedRef = useRef(false);
 
   // --- Boyutlar (çentik/safe-area dahil, küçük ekranlara sığacak şekilde) ---
   const portrait = height > width;
@@ -351,31 +366,66 @@ export function GameScreen({ mode, onExit }: Props) {
     }
   }, [game, phase, selected, sources, aiTurn]);
 
-  // AI (Bilgisayar) turu: zar at → hamleleri sırayla oyna → gerekirse pas
+  // AI (Bilgisayar) turu: zar at → hamleyi önce vurgula, sonra oyna → gerekirse pas
   useEffect(() => {
     if (!aiTurn) return;
     let t: ReturnType<typeof setTimeout>;
+    let t2: ReturnType<typeof setTimeout> | undefined;
     if (game.rolled === null) {
       t = setTimeout(() => {
-        setGame(rollDice(game, randomDie(), randomDie()));
+        const d1 = randomDie();
+        const d2 = randomDie();
+        setGame(rollDice(game, d1, d2));
+        setRollPopup({ dice: [d1, d2], player: AI_PLAYER, key: Date.now() });
         setUndoStack([]);
         setSelected(null);
-      }, 800);
+      }, 900);
     } else if (legal.length > 0) {
       t = setTimeout(() => {
         const m = chooseMove(game);
-        if (m) setGame(applyMove(game, m));
-      }, 600);
+        if (!m) return;
+        // Önce hangi pulu oynayacağını göster, sonra hamleyi uygula
+        setAiPreview({
+          src:
+            m.type === 'place'
+              ? { kind: 'hand' }
+              : { kind: 'point', point: m.from },
+          dest: m.type === 'bearoff' ? 'off' : m.to,
+        });
+        t2 = setTimeout(() => {
+          setAiPreview(null);
+          setGame(applyMove(game, m));
+        }, 750);
+      }, 650);
     } else if (game.dice.length > 0) {
       // Hamle yok: pas
       t = setTimeout(() => {
         setGame(endTurn(game));
         setUndoStack([]);
         setSelected(null);
-      }, 900);
+      }, 1100);
     }
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      if (t2) clearTimeout(t2);
+      setAiPreview(null);
+    };
   }, [aiTurn, game, legal]);
+
+  // Zar popup'ı kısa süre sonra kaybolsun
+  useEffect(() => {
+    if (!rollPopup) return;
+    const t = setTimeout(() => setRollPopup(null), 1300);
+    return () => clearTimeout(t);
+  }, [rollPopup]);
+
+  // AI moduna karşı biten oyunu istatistiklere işle (bir kez)
+  useEffect(() => {
+    if (phase === 'over' && mode === 'ai' && game.winner !== null && !recordedRef.current) {
+      recordedRef.current = true;
+      recordAiResult(game.winner === 0);
+    }
+  }, [phase, mode, game.winner]);
 
   const mustPass =
     phase === 'playing' &&
@@ -384,7 +434,10 @@ export function GameScreen({ mode, onExit }: Props) {
     legal.length === 0;
 
   function doRoll() {
-    setGame(rollDice(game, randomDie(), randomDie()));
+    const d1 = randomDie();
+    const d2 = randomDie();
+    setGame(rollDice(game, d1, d2));
+    setRollPopup({ dice: [d1, d2], player: game.turn, key: Date.now() });
     setUndoStack([]);
     setSelected(null);
   }
@@ -414,6 +467,9 @@ export function GameScreen({ mode, onExit }: Props) {
     setGame(newGame());
     setUndoStack([]);
     setSelected(null);
+    setAiPreview(null);
+    setRollPopup(null);
+    recordedRef.current = false;
   }
 
   const turnName = PLAYER_NAMES[game.turn];
@@ -432,8 +488,8 @@ export function GameScreen({ mode, onExit }: Props) {
       ]}
     >
       <View style={[styles.banner, { height: bannerH }]}>
-        <Pressable onPress={onExit} hitSlop={8}>
-          <Text style={styles.menuBtn}>‹ Menü</Text>
+        <Pressable onPress={onExit} hitSlop={8} style={styles.menuBtnBox}>
+          <Text style={styles.menuBtnText}>‹ Menü</Text>
         </Pressable>
         <View style={styles.turnWrap}>
           <View
@@ -446,10 +502,12 @@ export function GameScreen({ mode, onExit }: Props) {
             ]}
           />
           <Text style={styles.turnText}>
-            {phase === 'playing' ? `Sıra: ${turnName}` : 'Ters Tavla'}
+            {phase === 'playing'
+              ? `Sıra: ${mode === 'ai' && game.turn === AI_PLAYER ? AI_NAME : turnName}`
+              : 'R3V3RS3'}
           </Text>
         </View>
-        <Text style={styles.menuBtn}> </Text>
+        <View style={styles.menuBtnSpacer} />
       </View>
 
       <View style={portrait ? styles.col : styles.row}>
@@ -485,11 +543,27 @@ export function GameScreen({ mode, onExit }: Props) {
                 state={game}
                 width={boardW}
                 height={boardH}
-                sourcePoints={sourcePointSet}
-                selectedPoint={selected?.kind === 'point' ? selected.point! : null}
-                destPoints={destPointSet}
-                handIsSource={handIsSource}
-                handSelected={selected?.kind === 'hand'}
+                sourcePoints={aiTurn ? EMPTY_POINTS : sourcePointSet}
+                selectedPoint={
+                  aiTurn
+                    ? aiPreview?.src.kind === 'point'
+                      ? aiPreview.src.point!
+                      : null
+                    : selected?.kind === 'point'
+                      ? selected.point!
+                      : null
+                }
+                destPoints={
+                  aiTurn
+                    ? aiPreview && aiPreview.dest !== 'off'
+                      ? new Set([aiPreview.dest])
+                      : EMPTY_POINTS
+                    : destPointSet
+                }
+                handIsSource={aiTurn ? false : handIsSource}
+                handSelected={
+                  aiTurn ? aiPreview?.src.kind === 'hand' : selected?.kind === 'hand'
+                }
               />
             </View>
           );
@@ -521,6 +595,19 @@ export function GameScreen({ mode, onExit }: Props) {
         />
       )}
 
+      {/* Zar atma popup'ı */}
+      {rollPopup && (
+        <RollPopup
+          key={rollPopup.key}
+          dice={rollPopup.dice}
+          playerName={
+            mode === 'ai' && rollPopup.player === AI_PLAYER
+              ? AI_NAME
+              : PLAYER_NAMES[rollPopup.player]
+          }
+        />
+      )}
+
       {phase === 'opening' && (
         <OpeningOverlay
           opening={opening}
@@ -548,6 +635,43 @@ export function GameScreen({ mode, onExit }: Props) {
           </View>
         </View>
       )}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+/** Zar atılınca ortada beliren, yaylanarak büyüyen zar gösterimi */
+function RollPopup({
+  dice,
+  playerName,
+}: {
+  dice: [number, number];
+  playerName: string;
+}) {
+  const scale = useRef(new Animated.Value(0.2)).current;
+  useEffect(() => {
+    Animated.spring(scale, {
+      toValue: 1,
+      friction: 4,
+      tension: 120,
+      useNativeDriver: true,
+    }).start();
+  }, [scale]);
+  return (
+    <View style={styles.rollOverlay} pointerEvents="none">
+      <Animated.View style={[styles.rollBox, { transform: [{ scale }] }]}>
+        <Text style={styles.rollName}>{playerName}</Text>
+        <View style={styles.rollDice}>
+          <View style={{ transform: [{ rotate: '-10deg' }] }}>
+            <Die value={dice[0]} size={56} />
+          </View>
+          <View style={{ transform: [{ rotate: '8deg' }] }}>
+            <Die value={dice[1]} size={56} />
+          </View>
+        </View>
+        {dice[0] === dice[1] && <Text style={styles.rollDouble}>ÇİFT! ×4</Text>}
+      </Animated.View>
     </View>
   );
 }
@@ -777,10 +901,59 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 4,
   },
-  menuBtn: {
-    color: colors.textDim,
+  menuBtnBox: {
+    backgroundColor: '#00000055',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: '#FFFFFF22',
+  },
+  menuBtnText: {
+    color: colors.text,
     fontSize: 14,
-    width: 60,
+    fontWeight: '700',
+  },
+  menuBtnSpacer: {
+    width: 64,
+  },
+  rollOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rollBox: {
+    backgroundColor: '#241812EE',
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 22,
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1.5,
+    borderColor: colors.brass,
+    shadowColor: '#000',
+    shadowOpacity: 0.6,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 10,
+  },
+  rollName: {
+    color: colors.textDim,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  rollDice: {
+    flexDirection: 'row',
+    gap: 14,
+  },
+  rollDouble: {
+    color: colors.accent,
+    fontSize: 14,
+    fontWeight: '900',
   },
   turnWrap: {
     flexDirection: 'row',
