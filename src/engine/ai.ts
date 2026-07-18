@@ -1,10 +1,12 @@
-import { applyMove, legalMoves, topRun } from './index';
+import { applyMove, distanceToOff, legalMoves, topRun } from './index';
 import type { GameState, Move, Player } from './types';
 
 /**
- * Basit sezgisel AI: her hamleyi puanlar, en yükseğini oynar.
- * Öncelikler: toplama > rakibi kilitleme > güvenli yığın > ilerleme;
- * açıkta tek pul bırakmak ceza alır.
+ * AI: her legal hamle için hamle sonrası pozisyonu değerlendirir, en iyisini
+ * oynar. Değerlendirme; pul sokmayı, ikili (güvenli) yığın kurmayı ve rakibi
+ * kilitlemeyi ödüllendirir, açıkta tek pul bırakmayı cezalandırır. Bu sayede
+ * "tek pulla koşturma" davranışı oluşmaz: pulu içeri sokmak ve eşlemek,
+ * yalnız pulu sürmekten her zaman daha değerlidir.
  */
 export function chooseMove(state: GameState): Move | null {
   const moves = legalMoves(state);
@@ -14,19 +16,7 @@ export function chooseMove(state: GameState): Move | null {
   let best: Move = moves[0];
   let bestScore = -Infinity;
   for (const m of moves) {
-    let s = 0;
-    if (m.type === 'bearoff') {
-      s += 100;
-    } else {
-      const run = topRun(state.points[m.to]);
-      if (run && run.player !== p && run.count === 1) s += 45; // rakibi kilitle
-      if (run && run.player === p) s += 12; // kendi pulunun üstü: güvenli
-      if (m.type === 'place') s += 6; // erken pul sokmak iyidir
-      else s += m.die * 0.8; // ilerleme
-    }
-    // Hamle sonrası açıkta (en üstte tek başına) kalan pullarımız risklidir
-    s -= 6 * exposedTops(applyMove(state, m), p);
-    s += Math.random(); // eşitlik bozucu
+    const s = evaluate(applyMove(state, m), p) + Math.random() * 0.01;
     if (s > bestScore) {
       bestScore = s;
       best = m;
@@ -35,12 +25,43 @@ export function chooseMove(state: GameState): Move | null {
   return best;
 }
 
-/** En üstte tek başına duran (kilitlenebilir) pul sayısı */
-function exposedTops(state: GameState, p: Player): number {
-  let count = 0;
+/** Pozisyonun p oyuncusu için değeri (büyük = iyi) */
+export function evaluate(state: GameState, p: Player): number {
+  let score = 0;
+
+  score += state.borneOff[p] * 40; // toplanan pul en değerlisi
+  score += (15 - state.hand[p] - state.borneOff[p]) * 10; // tahtaya girmiş pul
+
   for (let i = 0; i < 24; i++) {
-    const run = topRun(state.points[i]);
-    if (run && run.player === p && run.count === 1) count++;
+    const stack = state.points[i];
+    if (stack.length === 0) continue;
+    const run = topRun(stack)!;
+
+    // Kulede altta kalan rakip pulları: kilitli rakip = büyük avantaj
+    if (run.player === p) {
+      let locked = 0;
+      for (let k = 0; k < stack.length - run.count; k++) {
+        if (stack[k] !== p) locked++;
+      }
+      score += locked * 14;
+      // En üstte 2+ pulumuz: hane bize güvenli
+      if (run.count >= 2) score += 9;
+      // En üstte tek pulumuz: kilitlenebilir, riskli
+      if (run.count === 1) score -= 7;
+    } else {
+      // Bizim pullarımız rakibin altında kilitliyse kötü
+      let ourLocked = 0;
+      for (let k = 0; k < stack.length - run.count; k++) {
+        if (stack[k] === p) ourLocked++;
+      }
+      score -= ourLocked * 12;
+    }
+
+    // İlerleme: her pulumuz kat ettiği yol kadar puan
+    for (const c of stack) {
+      if (c === p) score += (24 - distanceToOff(p, i)) * 0.35;
+    }
   }
-  return count;
+
+  return score;
 }

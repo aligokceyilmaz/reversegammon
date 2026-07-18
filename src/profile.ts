@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const KEY = 'r3v3rs3:profile';
+const KEY = 'alvat:profile';
+const OLD_KEY = 'r3v3rs3:profile'; // eski isimden geçiş
 
 export interface Profile {
   name: string;
@@ -14,7 +15,8 @@ export const emptyProfile: Profile = { name: '', aiGames: 0, aiWins: 0 };
 
 export async function loadProfile(): Promise<Profile> {
   try {
-    const raw = await AsyncStorage.getItem(KEY);
+    const raw =
+      (await AsyncStorage.getItem(KEY)) ?? (await AsyncStorage.getItem(OLD_KEY));
     if (!raw) return { ...emptyProfile };
     return { ...emptyProfile, ...JSON.parse(raw) };
   } catch {

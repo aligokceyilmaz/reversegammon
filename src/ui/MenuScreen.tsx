@@ -52,7 +52,7 @@ export function MenuScreen({ onPlay }: Props) {
 
   return (
     <View style={styles.root}>
-      <Text style={styles.title}>R3V3RS3</Text>
+      <Text style={styles.title}>ALVAT</Text>
       <Text style={styles.subtitle}>Ters tavla · Kilitle · İlk toplayan kazanır</Text>
 
       {/* Profil kartı */}

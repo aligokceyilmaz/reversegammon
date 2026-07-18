@@ -1,4 +1,4 @@
-# Ters Tavla (Reversegammon) 🎲
+# ALVAT — Ters Tavla 🎲
 
 Klasik tavla ekipmanıyla oynanan ama **tersten** işleyen bir mobil oyun: tahta boş başlar, pullar elden oyuna sokulur, taş kırmak yerine rakibin pulunun **üstüne oturup kilitlersin**. 15 pulunu karşıya taşıyıp ilk toplayan kazanır.
 

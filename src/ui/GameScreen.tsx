@@ -504,7 +504,7 @@ export function GameScreen({ mode, onExit }: Props) {
           <Text style={styles.turnText}>
             {phase === 'playing'
               ? `Sıra: ${mode === 'ai' && game.turn === AI_PLAYER ? AI_NAME : turnName}`
-              : 'R3V3RS3'}
+              : 'ALVAT'}
           </Text>
         </View>
         <View style={styles.menuBtnSpacer} />
