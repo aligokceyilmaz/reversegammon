@@ -21,9 +21,10 @@ import {
   TOTAL_CHECKERS,
 } from '../engine';
 import type { DestOption, GameState, MoveSource, Player } from '../engine';
+import { chooseMove } from '../engine/ai';
 import { BoardSvg, boardGeometry } from './BoardSvg';
 import { Die } from './Dice';
-import { colors, PLAYER_NAMES } from './theme';
+import { AI_NAME, colors, PLAYER_NAMES } from './theme';
 
 type Phase = 'opening' | 'playing' | 'over';
 
@@ -42,11 +43,17 @@ interface DragInfo {
   wasSelected: boolean;
 }
 
+export type GameMode = 'pvp' | 'ai';
+
 interface Props {
+  mode: GameMode;
   onExit: () => void;
 }
 
-export function GameScreen({ onExit }: Props) {
+/** AI her zaman Siyah (oyuncu 1) olarak oynar */
+const AI_PLAYER: Player = 1;
+
+export function GameScreen({ mode, onExit }: Props) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [phase, setPhase] = useState<Phase>('opening');
@@ -109,6 +116,12 @@ export function GameScreen({ onExit }: Props) {
   );
   const offOption = selectedOptions.find((o) => o.dest === 'off');
 
+  const aiTurn =
+    mode === 'ai' &&
+    phase === 'playing' &&
+    game.turn === AI_PLAYER &&
+    game.winner === null;
+
   // PanResponder'lar bir kez kurulur; güncel duruma ref üzerinden erişirler
   const ui = useRef({
     phase,
@@ -120,6 +133,7 @@ export function GameScreen({ onExit }: Props) {
     destPointSet,
     handIsSource,
     geo,
+    aiTurn,
   });
   ui.current = {
     phase,
@@ -131,6 +145,7 @@ export function GameScreen({ onExit }: Props) {
     destPointSet,
     handIsSource,
     geo,
+    aiTurn,
   };
 
   // Tahtanın pencere içi konumu kendi yerleşimimizden bilinir
@@ -221,7 +236,7 @@ export function GameScreen({ onExit }: Props) {
     PanResponder.create({
       onStartShouldSetPanResponder: () => {
         const u = ui.current;
-        return u.phase === 'playing' && u.game.rolled !== null;
+        return u.phase === 'playing' && u.game.rolled !== null && !u.aiTurn;
       },
       onPanResponderGrant: (evt) => {
         const u = ui.current;
@@ -325,10 +340,42 @@ export function GameScreen({ onExit }: Props) {
 
   // Tek kaynak varsa otomatik seç (örn. ilk turlarda sadece "el" oynanabilir)
   useEffect(() => {
-    if (phase === 'playing' && game.rolled && !selected && sources.length === 1) {
+    if (
+      phase === 'playing' &&
+      game.rolled &&
+      !selected &&
+      sources.length === 1 &&
+      !aiTurn
+    ) {
       setSelected(sources[0]);
     }
-  }, [game, phase, selected, sources]);
+  }, [game, phase, selected, sources, aiTurn]);
+
+  // AI (Bilgisayar) turu: zar at → hamleleri sırayla oyna → gerekirse pas
+  useEffect(() => {
+    if (!aiTurn) return;
+    let t: ReturnType<typeof setTimeout>;
+    if (game.rolled === null) {
+      t = setTimeout(() => {
+        setGame(rollDice(game, randomDie(), randomDie()));
+        setUndoStack([]);
+        setSelected(null);
+      }, 800);
+    } else if (legal.length > 0) {
+      t = setTimeout(() => {
+        const m = chooseMove(game);
+        if (m) setGame(applyMove(game, m));
+      }, 600);
+    } else if (game.dice.length > 0) {
+      // Hamle yok: pas
+      t = setTimeout(() => {
+        setGame(endTurn(game));
+        setUndoStack([]);
+        setSelected(null);
+      }, 900);
+    }
+    return () => clearTimeout(t);
+  }, [aiTurn, game, legal]);
 
   const mustPass =
     phase === 'playing' &&
@@ -417,6 +464,7 @@ export function GameScreen({ onExit }: Props) {
               width={portrait ? boardW : panelW}
               height={portrait ? panelH : undefined}
               isTurn={game.turn === p && phase === 'playing'}
+              aiControlled={mode === 'ai' && p === AI_PLAYER}
               offActive={!!offOption && game.turn === p}
               canUndo={undoStack.length > 0}
               mustPass={mustPass}
@@ -567,6 +615,7 @@ interface PanelProps {
   width: number;
   height?: number;
   isTurn: boolean;
+  aiControlled: boolean;
   offActive: boolean;
   canUndo: boolean;
   mustPass: boolean;
@@ -585,6 +634,7 @@ function PlayerPanel({
   width,
   height,
   isTurn,
+  aiControlled,
   offActive,
   canUndo,
   mustPass,
@@ -615,13 +665,15 @@ function PlayerPanel({
             <Text style={styles.doubleText}>×4 ({game.dice.length})</Text>
           )}
         </View>
+      ) : aiControlled ? (
+        <Text style={styles.aiThinking}>düşünüyor…</Text>
       ) : (
         <Pressable style={styles.primaryBtn} onPress={onRoll}>
           <Text style={styles.primaryBtnText}>🎲 Zar At</Text>
         </Pressable>
       )}
 
-      {mustPass && (
+      {mustPass && !aiControlled && (
         <Pressable
           style={[styles.primaryBtn, { backgroundColor: colors.danger }]}
           onPress={onPass}
@@ -632,7 +684,7 @@ function PlayerPanel({
         </Pressable>
       )}
 
-      {canUndo && !mustPass && (
+      {canUndo && !mustPass && !aiControlled && (
         <Pressable style={styles.ghostBtn} onPress={onUndo}>
           <Text style={styles.ghostBtnText}>↩ Geri Al</Text>
         </Pressable>
@@ -683,7 +735,7 @@ function PlayerPanel({
         <View style={styles.panelHLeft}>
           <View style={styles.panelHeader}>
             <View style={[styles.turnDot, { backgroundColor: checkerColor }]} />
-            <Text style={styles.panelName}>{PLAYER_NAMES[player]}</Text>
+            <Text style={styles.panelName}>{aiControlled ? AI_NAME : PLAYER_NAMES[player]}</Text>
           </View>
           {handCount > 0 && (
             <Text style={styles.handCountText}>Elde {handCount}</Text>
@@ -699,7 +751,7 @@ function PlayerPanel({
     <View style={[styles.panel, { width }, isTurn && styles.panelActive]}>
       <View style={styles.panelHeader}>
         <View style={[styles.turnDot, { backgroundColor: checkerColor }]} />
-        <Text style={styles.panelName}>{PLAYER_NAMES[player]}</Text>
+        <Text style={styles.panelName}>{aiControlled ? AI_NAME : PLAYER_NAMES[player]}</Text>
       </View>
       {handCount > 0 && (
         <Text style={styles.handCountText}>Elde {handCount} pul (barda)</Text>
@@ -884,6 +936,11 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontSize: 12,
     fontWeight: '700',
+  },
+  aiThinking: {
+    color: colors.textDim,
+    fontSize: 13,
+    fontStyle: 'italic',
   },
   primaryBtn: {
     backgroundColor: colors.accent,

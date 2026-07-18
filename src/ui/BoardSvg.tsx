@@ -157,6 +157,15 @@ function Checker({
       />
       {/* Oyuk (çukur) merkez */}
       <Circle cx={cx} cy={cy} r={r * 0.45} fill={w ? 'url(#chWdip)' : 'url(#chBdip)'} />
+      {/* Parlaklık vurgusu (üst-sol) */}
+      <Ellipse
+        cx={cx - r * 0.32}
+        cy={cy - r * 0.42}
+        rx={r * 0.34}
+        ry={r * 0.2}
+        fill="#FFFFFF"
+        opacity={w ? 0.4 : 0.16}
+      />
       {dimmed && <Circle cx={cx} cy={cy} r={r} fill="#000" opacity={0.16} />}
     </React.Fragment>
   );
@@ -319,8 +328,8 @@ export function BoardSvg({
     }
   }
 
-  // Pirinç menteşeler (bar üzerinde, ortada)
-  const hinges = [height / 2].map((hy, idx) => (
+  // Pirinç menteşeler (bar üzerinde)
+  const hinges = [height * 0.32, height / 2, height * 0.68].map((hy, idx) => (
     <React.Fragment key={`hinge${idx}`}>
       <Rect
         x={barC - barW * 0.28}
@@ -358,55 +367,57 @@ export function BoardSvg({
     <View style={{ width, height }} pointerEvents="none">
       <Svg width={width} height={height}>
         <Defs>
-          <LinearGradient id="wood" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor="#5A3F27" />
-            <Stop offset="0.5" stopColor="#46311D" />
-            <Stop offset="1" stopColor="#33220F" />
+          <LinearGradient id="wood" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor="#5E4128" />
+            <Stop offset="0.5" stopColor="#4E3421" />
+            <Stop offset="1" stopColor="#33200F" />
           </LinearGradient>
-          <LinearGradient id="felt" x1="0" y1="0" x2="0.9" y2="1">
-            <Stop offset="0" stopColor="#8A6845" />
-            <Stop offset="0.5" stopColor="#7A5A3C" />
-            <Stop offset="1" stopColor="#684A2E" />
+          <LinearGradient id="felt" x1="0" y1="0" x2="0.35" y2="1">
+            <Stop offset="0" stopColor="#D29B60" />
+            <Stop offset="0.55" stopColor="#C08A52" />
+            <Stop offset="1" stopColor="#A9713D" />
           </LinearGradient>
           <LinearGradient id="barGrad" x1="0" y1="0" x2="1" y2="0">
-            <Stop offset="0" stopColor="#33220F" />
-            <Stop offset="0.5" stopColor="#5A4128" />
-            <Stop offset="1" stopColor="#33220F" />
+            <Stop offset="0" stopColor="#33200F" />
+            <Stop offset="0.5" stopColor="#5E4128" />
+            <Stop offset="1" stopColor="#33200F" />
           </LinearGradient>
           <LinearGradient id="brassGrad" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor="#E8C95A" />
-            <Stop offset="0.5" stopColor="#C9A227" />
-            <Stop offset="1" stopColor="#8F6E14" />
+            <Stop offset="0" stopColor="#F0D06A" />
+            <Stop offset="0.5" stopColor="#D9A73E" />
+            <Stop offset="1" stopColor="#9A711A" />
           </LinearGradient>
-          <LinearGradient id="triLight" x1="0" y1="0" x2="0.3" y2="1">
-            <Stop offset="0" stopColor="#F2E4BE" />
-            <Stop offset="1" stopColor="#D9C393" />
+          <LinearGradient id="triLight" x1="0" y1="0" x2="0.25" y2="1">
+            <Stop offset="0" stopColor="#F7DFAC" />
+            <Stop offset="1" stopColor="#E2BE7E" />
           </LinearGradient>
-          <LinearGradient id="triDark" x1="0" y1="0" x2="0.3" y2="1">
-            <Stop offset="0" stopColor="#9C4A28" />
-            <Stop offset="1" stopColor="#7A3418" />
+          <LinearGradient id="triDark" x1="0" y1="0" x2="0.25" y2="1">
+            <Stop offset="0" stopColor="#6B4526" />
+            <Stop offset="1" stopColor="#4A2C13" />
           </LinearGradient>
-          {/* Krem akçaağaç pul */}
-          <RadialGradient id="chW" cx="0.35" cy="0.3" r="0.95">
-            <Stop offset="0" stopColor="#FBF0D2" />
-            <Stop offset="0.6" stopColor="#EAD8B2" />
-            <Stop offset="1" stopColor="#C3A272" />
+          {/* Parlak krem pul */}
+          <RadialGradient id="chW" cx="0.38" cy="0.3" r="1">
+            <Stop offset="0" stopColor="#FDF3D7" />
+            <Stop offset="0.55" stopColor="#F2DFB6" />
+            <Stop offset="0.85" stopColor="#DCC08B" />
+            <Stop offset="1" stopColor="#BC9C67" />
           </RadialGradient>
           <RadialGradient id="chWdip" cx="0.5" cy="0.55" r="0.8">
-            <Stop offset="0" stopColor="#CDB183" />
-            <Stop offset="0.7" stopColor="#E2CD9F" />
-            <Stop offset="1" stopColor="#F3E5C2" />
+            <Stop offset="0" stopColor="#E4CD9E" />
+            <Stop offset="0.7" stopColor="#F0DDB4" />
+            <Stop offset="1" stopColor="#FBF0D2" />
           </RadialGradient>
-          {/* Koyu ceviz pul */}
-          <RadialGradient id="chB" cx="0.35" cy="0.3" r="0.95">
-            <Stop offset="0" stopColor="#7C5138" />
-            <Stop offset="0.6" stopColor="#4A2E20" />
-            <Stop offset="1" stopColor="#2A160B" />
+          {/* Parlak koyu kahve pul */}
+          <RadialGradient id="chB" cx="0.38" cy="0.3" r="1">
+            <Stop offset="0" stopColor="#6E5344" />
+            <Stop offset="0.55" stopColor="#42302A" />
+            <Stop offset="0.85" stopColor="#2E1F17" />
+            <Stop offset="1" stopColor="#1B100A" />
           </RadialGradient>
           <RadialGradient id="chBdip" cx="0.5" cy="0.55" r="0.8">
-            <Stop offset="0" stopColor="#2E1A0E" />
-            <Stop offset="0.7" stopColor="#4A2E20" />
-            <Stop offset="1" stopColor="#5F3D28" />
+            <Stop offset="0" stopColor="#271812" />
+            <Stop offset="0.7" stopColor="#3C2B24" />
+            <Stop offset="1" stopColor="#54403A" />
           </RadialGradient>
         </Defs>
         <Rect x={0} y={0} width={width} height={height} rx={12} fill="url(#wood)" />

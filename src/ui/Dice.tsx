@@ -53,12 +53,12 @@ export function Die({ value, size = 40, dimmed = false }: Props) {
 
 const styles = StyleSheet.create({
   die: {
-    // Ahşap zar görünümü
-    backgroundColor: '#DBAE6C',
+    // Krem zar (referans görseldeki gibi)
+    backgroundColor: '#F8F0DC',
     borderWidth: 1,
-    borderColor: '#7A5322',
+    borderColor: '#B49B72',
     borderBottomWidth: 3,
-    borderBottomColor: '#8A5F28',
+    borderBottomColor: '#C7AE7F',
     position: 'relative',
     shadowColor: '#000',
     shadowOpacity: 0.45,
@@ -68,6 +68,6 @@ const styles = StyleSheet.create({
   },
   pip: {
     position: 'absolute',
-    backgroundColor: '#2E1C0C',
+    backgroundColor: '#2A1E12',
   },
 });

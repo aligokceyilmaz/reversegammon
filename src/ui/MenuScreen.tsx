@@ -16,7 +16,7 @@ const RULES_SUMMARY = [
 ] as const;
 
 interface Props {
-  onPlay: () => void;
+  onPlay: (mode: 'pvp' | 'ai') => void;
 }
 
 export function MenuScreen({ onPlay }: Props) {
@@ -26,8 +26,11 @@ export function MenuScreen({ onPlay }: Props) {
       <Text style={styles.title}>TERS TAVLA</Text>
       <Text style={styles.subtitle}>Boş tahtayla başla · Kilitle · İlk toplayan kazanır</Text>
 
-      <Pressable style={styles.primaryBtn} onPress={onPlay}>
-        <Text style={styles.primaryBtnText}>▶ Oyna (2 Kişi)</Text>
+      <Pressable style={styles.primaryBtn} onPress={() => onPlay('ai')}>
+        <Text style={styles.primaryBtnText}>🤖 Tek Kişilik</Text>
+      </Pressable>
+      <Pressable style={styles.primaryBtn} onPress={() => onPlay('pvp')}>
+        <Text style={styles.primaryBtnText}>👥 2 Kişi (aynı telefon)</Text>
       </Pressable>
       <Pressable style={styles.ghostBtn} onPress={() => setShowRules(!showRules)}>
         <Text style={styles.ghostBtnText}>

@@ -7,7 +7,7 @@ Kuralların tamamı için: [RULES.md](./RULES.md)
 ## Özellikler
 
 - iOS + Android (React Native / Expo, tek kod tabanı)
-- Aynı cihazda 2 kişilik (pass-and-play)
+- Tek kişilik (bilgisayara karşı, sezgisel AI) ve aynı cihazda 2 kişilik (pass-and-play)
 - Kilit/kule mekaniği görsel olarak kule diziliminde gösterilir
 - Zorunlu hamle kuralları motor tarafından uygulanır (en çok zar oynama, tek zar oynanabiliyorsa büyüğü)
 - Tur içi Geri Al, otomatik pas, açılış zarı
