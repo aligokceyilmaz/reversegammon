@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -12,7 +13,6 @@ import type { GameState, Player } from '../engine';
 import { AVATARS, loadProfile, saveProfile, winRate } from '../profile';
 import type { Profile } from '../profile';
 import { BoardSvg } from './BoardSvg';
-import { Logo } from './Logo';
 import { colors } from './theme';
 
 // ---------------------------------------------------------------------------
@@ -171,7 +171,14 @@ export function MenuScreen({ onPlay }: Props) {
 
   return (
     <View style={styles.root}>
-      <Logo width={Math.min(width - 60, 320)} />
+      <Image
+        source={require('../../assets/logo.png')}
+        style={{
+          width: Math.min(width - 48, 340),
+          height: Math.min(width - 48, 340) * 0.69,
+        }}
+        resizeMode="contain"
+      />
       <Text style={styles.subtitle}>Ters tavla · Kilitle · İlk toplayan kazanır</Text>
 
       {/* Profil kartı */}
