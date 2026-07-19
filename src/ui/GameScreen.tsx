@@ -90,17 +90,26 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
   const seriesRecordedRef = useRef(false);
   /** Seriyi kazanmak için gereken galibiyet */
   const target = Math.floor(matchLen / 2) + 1;
-  /** Kullanıcı adı (Beyaz'ın etiketi için) */
+  /** Kullanıcı adı ve avatarı (Beyaz'ın etiketi için) */
   const [profileName, setProfileName] = useState('');
+  const [profileAvatar, setProfileAvatar] = useState('');
   /** Tur süresi geri sayımı */
   const [timeLeft, setTimeLeft] = useState(TURN_SECONDS);
+  /** Oyun duraklatıldı mı? (süre ve AI durur) */
+  const [paused, setPaused] = useState(false);
 
   useEffect(() => {
-    loadProfile().then((p) => setProfileName(p.name));
+    loadProfile().then((p) => {
+      setProfileName(p.name);
+      setProfileAvatar(p.avatar);
+    });
   }, []);
 
   function nameFor(p: Player): string {
-    if (p === 0) return profileName ? `Beyaz (${profileName})` : 'Beyaz';
+    if (p === 0) {
+      const av = profileAvatar ? `${profileAvatar} ` : '';
+      return profileName ? `${av}Beyaz (${profileName})` : `${av}Beyaz`;
+    }
     return mode === 'ai' ? 'Siyah (Bilgisayar)' : 'Siyah';
   }
 
@@ -175,6 +184,7 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
     handIsSource,
     geo,
     aiTurn,
+    paused,
   });
   ui.current = {
     phase,
@@ -187,6 +197,7 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
     handIsSource,
     geo,
     aiTurn,
+    paused,
   };
 
   // Tahtanın pencere içi konumu kendi yerleşimimizden bilinir
@@ -277,7 +288,12 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
     PanResponder.create({
       onStartShouldSetPanResponder: () => {
         const u = ui.current;
-        return u.phase === 'playing' && u.game.rolled !== null && !u.aiTurn;
+        return (
+          u.phase === 'playing' &&
+          u.game.rolled !== null &&
+          !u.aiTurn &&
+          !u.paused
+        );
       },
       onPanResponderGrant: (evt) => {
         const u = ui.current;
@@ -369,7 +385,7 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
       setPhase('over');
       return;
     }
-    if (game.rolled && game.dice.length === 0) {
+    if (game.rolled && game.dice.length === 0 && !paused) {
       const t = setTimeout(() => {
         setGame(endTurn(game));
         setUndoStack([]);
@@ -377,7 +393,7 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
       }, 650);
       return () => clearTimeout(t);
     }
-  }, [game, phase]);
+  }, [game, phase, paused]);
 
   // Tek kaynak varsa otomatik seç (örn. ilk turlarda sadece "el" oynanabilir)
   useEffect(() => {
@@ -395,7 +411,7 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
   // AI (Bilgisayar) turu: zar at → hamleyi önce vurgula, sonra oyna
   // (hamle yoksa aşağıdaki otomatik pas akışı devreye girer)
   useEffect(() => {
-    if (!aiTurn) return;
+    if (!aiTurn || paused) return;
     let t: ReturnType<typeof setTimeout>;
     let t2: ReturnType<typeof setTimeout> | undefined;
     if (game.rolled === null) {
@@ -430,12 +446,13 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
       if (t2) clearTimeout(t2);
       setAiPreview(null);
     };
-  }, [aiTurn, game, legal]);
+  }, [aiTurn, game, legal, paused]);
 
   // Hamle yapılamıyorsa: uyarı popup'ı göster, sonra sırayı otomatik geçir
   useEffect(() => {
     if (
       phase !== 'playing' ||
+      paused ||
       game.winner !== null ||
       game.rolled === null ||
       game.dice.length === 0 ||
@@ -455,7 +472,7 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
       clearTimeout(t);
       setNoMovePopup(null);
     };
-  }, [phase, game, legal]);
+  }, [phase, game, legal, paused]);
 
   // Zar popup'ı kısa süre sonra kaybolsun
   useEffect(() => {
@@ -494,7 +511,7 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
     setSelected(null);
   };
   useEffect(() => {
-    if (phase !== 'playing' || aiTurn || game.winner !== null) return;
+    if (phase !== 'playing' || aiTurn || paused || game.winner !== null) return;
     setTimeLeft(TURN_SECONDS);
     const started = Date.now();
     const iv = setInterval(() => {
@@ -507,7 +524,7 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
     }, 250);
     return () => clearInterval(iv);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, aiTurn, game.turn]);
+  }, [phase, aiTurn, game.turn, paused]);
 
   function doRoll() {
     const d1 = randomDie();
@@ -597,11 +614,22 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
             </Text>
           )}
         </View>
-        <View style={styles.scoreChip}>
-          <Text style={styles.scoreText}>
-            {series[0]}–{series[1]}
-            {matchLen > 1 ? `  ·  ${gameNo}/${matchLen}` : ''}
-          </Text>
+        <View style={styles.bannerRight}>
+          <View style={styles.scoreChip}>
+            <Text style={styles.scoreText}>
+              {series[0]}–{series[1]}
+              {matchLen > 1 ? `  ·  ${gameNo}/${matchLen}` : ''}
+            </Text>
+          </View>
+          {phase === 'playing' && (
+            <Pressable
+              onPress={() => setPaused(true)}
+              hitSlop={8}
+              style={styles.pauseBtn}
+            >
+              <Text style={styles.pauseBtnText}>⏸</Text>
+            </Pressable>
+          )}
         </View>
       </View>
 
@@ -724,6 +752,25 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
           dice={rollPopup.dice}
           playerName={nameFor(rollPopup.player)}
         />
+      )}
+
+      {/* Duraklatma ekranı */}
+      {paused && (
+        <View style={styles.overlay}>
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>⏸ Duraklatıldı</Text>
+            <Text style={styles.modalSub}>Süre ve rakip bekliyor</Text>
+            <Pressable
+              style={styles.primaryBtn}
+              onPress={() => setPaused(false)}
+            >
+              <Text style={styles.primaryBtnText}>▶ Devam Et</Text>
+            </Pressable>
+            <Pressable style={styles.ghostBtn} onPress={onExit}>
+              <Text style={styles.ghostBtnText}>Menüye Dön</Text>
+            </Pressable>
+          </View>
+        </View>
       )}
 
       {phase === 'opening' && (
@@ -1036,6 +1083,24 @@ const styles = StyleSheet.create({
     borderColor: '#FFFFFF22',
   },
   menuBtnText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  bannerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  pauseBtn: {
+    backgroundColor: '#00000055',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: '#FFFFFF22',
+  },
+  pauseBtnText: {
     color: colors.text,
     fontSize: 14,
     fontWeight: '700',

@@ -5,13 +5,23 @@ const OLD_KEY = 'r3v3rs3:profile'; // eski isimden geçiş
 
 export interface Profile {
   name: string;
+  /** Seçilen avatar (emoji) */
+  avatar: string;
   /** Bilgisayara karşı oynanan toplam oyun */
   aiGames: number;
   /** Bilgisayara karşı kazanılan oyun */
   aiWins: number;
 }
 
-export const emptyProfile: Profile = { name: '', aiGames: 0, aiWins: 0 };
+export const emptyProfile: Profile = {
+  name: '',
+  avatar: '',
+  aiGames: 0,
+  aiWins: 0,
+};
+
+/** Seçilebilir avatarlar (üst sıra kadın, alt sıra erkek) */
+export const AVATARS = ['👩', '👩‍🦰', '👱‍♀️', '👧', '👨', '🧔', '👱‍♂️', '👦'];
 
 export async function loadProfile(): Promise<Profile> {
   try {

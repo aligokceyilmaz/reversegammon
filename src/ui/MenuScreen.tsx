@@ -9,9 +9,10 @@ import {
 } from 'react-native';
 import { newGame, TOTAL_CHECKERS } from '../engine';
 import type { GameState, Player } from '../engine';
-import { loadProfile, saveProfile, winRate } from '../profile';
+import { AVATARS, loadProfile, saveProfile, winRate } from '../profile';
 import type { Profile } from '../profile';
 import { BoardSvg } from './BoardSvg';
+import { Logo } from './Logo';
 import { colors } from './theme';
 
 // ---------------------------------------------------------------------------
@@ -43,18 +44,18 @@ interface HowToPage {
 const PAGES: HowToPage[] = [
   {
     title: '1 · Boş Tahta, Desteden Başla',
-    text: 'Tahta boş başlar; 15 pulun ortadaki barın üzerindeki destede bekler. Zar değeriyle pulunu KENDİ bölgene (sağ alttaki 1-6 numaralı haneler) sokarsın. Örn. 5-2 attıysan 5 ve 2 hanelerine koyabilirsin.',
+    text: 'Tahta boş başlar; 15 pulun ortadaki barın üzerindeki destede bekler. Zar değeriyle pulunu KENDİ bölgene (sağ alttaki 1-6 numaralı haneler) sokarsın. Örn. 5 ve 2 attıysan 5 ve 2 numaralı hanelere birer pul koyabilirsin.',
     state: miniState({}),
     dests: [4, 1],
     handGlow: true,
   },
   {
     title: '2 · İlerle ve Birleştir',
-    text: 'Koymak zorunlu değilsin: tahtadaki pulunu da ilerletebilirsin. İki zarı aynı pulda birleştirmek de serbest (5-2 → toplam 7). Çift zar 4 hamle demektir.',
+    text: 'Örn. 5+2 attın: pulunun önce 5 ilerisi, sonra onun 2 ilerisi işaretlenir (yeşiller). Gelen 5 zarını oynadıktan sonra 2 ilerletmek yerine, pulunu DİREKT zarların toplamı kadar (7) da taşıyabilirsin. Çift zarda (örn. 4-4) aynı değerden 4 hamle hakkın olur: 4 pul sokabilir ya da aynı pulu 4 kez ilerletebilirsin.',
     state: miniState({ 8: [0, 0] }, [13, 15]),
     sources: [8],
     selected: 8,
-    dests: [10, 13, 15],
+    dests: [13, 15],
   },
   {
     title: '3 · Kilitle!',
@@ -137,23 +138,30 @@ interface Props {
 }
 
 export function MenuScreen({ onPlay }: Props) {
+  const { width } = useWindowDimensions();
   const [showRules, setShowRules] = useState(false);
   const [matchLen, setMatchLen] = useState(1);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [nameInput, setNameInput] = useState('');
+  const [avatarInput, setAvatarInput] = useState('');
   const [editingName, setEditingName] = useState(false);
 
   useEffect(() => {
     loadProfile().then((p) => {
       setProfile(p);
       setNameInput(p.name);
+      setAvatarInput(p.avatar);
     });
   }, []);
 
   async function submitName() {
     const name = nameInput.trim().slice(0, 16);
     if (!name || !profile) return;
-    const next = { ...profile, name };
+    const next = {
+      ...profile,
+      name,
+      avatar: avatarInput || AVATARS[0],
+    };
     setProfile(next);
     setEditingName(false);
     await saveProfile(next);
@@ -163,14 +171,28 @@ export function MenuScreen({ onPlay }: Props) {
 
   return (
     <View style={styles.root}>
-      <Text style={styles.title}>ALVAT</Text>
+      <Logo width={Math.min(width - 60, 320)} />
       <Text style={styles.subtitle}>Ters tavla · Kilitle · İlk toplayan kazanır</Text>
 
       {/* Profil kartı */}
       {profile !== null &&
         (needsName ? (
           <View style={styles.profileCard}>
-            <Text style={styles.profileLabel}>Kullanıcı adını seç</Text>
+            <Text style={styles.profileLabel}>Avatarını ve adını seç</Text>
+            <View style={styles.avatarRow}>
+              {AVATARS.map((a) => (
+                <Pressable
+                  key={a}
+                  onPress={() => setAvatarInput(a)}
+                  style={[
+                    styles.avatarChip,
+                    avatarInput === a && styles.avatarChipOn,
+                  ]}
+                >
+                  <Text style={styles.avatarEmoji}>{a}</Text>
+                </Pressable>
+              ))}
+            </View>
             <TextInput
               style={styles.nameInput}
               value={nameInput}
@@ -188,7 +210,8 @@ export function MenuScreen({ onPlay }: Props) {
         ) : (
           <View style={styles.profileCard}>
             <View style={styles.profileRow}>
-              <Text style={styles.profileName}>👤 {profile.name}</Text>
+              <Text style={styles.profileAvatar}>{profile.avatar || '👤'}</Text>
+              <Text style={styles.profileName}>{profile.name}</Text>
               <Pressable onPress={() => setEditingName(true)} hitSlop={8}>
                 <Text style={styles.profileEdit}>değiştir</Text>
               </Pressable>
@@ -245,12 +268,6 @@ const styles = StyleSheet.create({
     padding: 24,
     gap: 12,
   },
-  title: {
-    color: colors.accent,
-    fontSize: 44,
-    fontWeight: '900',
-    letterSpacing: 8,
-  },
   subtitle: {
     color: colors.textDim,
     fontSize: 14,
@@ -275,6 +292,30 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     fontWeight: '700',
+  },
+  profileAvatar: {
+    fontSize: 26,
+  },
+  avatarRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+    maxWidth: 300,
+  },
+  avatarChip: {
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    backgroundColor: '#00000044',
+    padding: 6,
+  },
+  avatarChipOn: {
+    borderColor: colors.accent,
+    backgroundColor: '#00000066',
+  },
+  avatarEmoji: {
+    fontSize: 26,
   },
   profileEdit: {
     color: colors.textDim,
