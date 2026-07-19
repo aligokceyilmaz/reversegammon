@@ -59,7 +59,7 @@ const AI_PLAYER: Player = 1;
 const EMPTY_POINTS: ReadonlySet<number> = new Set();
 /** Tur süresi (sn); test kancası ile değiştirilebilir */
 const TURN_SECONDS =
-  (globalThis as { __TURN_SECONDS__?: number }).__TURN_SECONDS__ ?? 15;
+  (globalThis as { __TURN_SECONDS__?: number }).__TURN_SECONDS__ ?? 30;
 
 export function GameScreen({ mode, matchLen, onExit }: Props) {
   const { width, height } = useWindowDimensions();
@@ -81,6 +81,8 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
     src: MoveSource;
     dest: number | 'off';
   } | null>(null);
+  /** Hamle yapılamadığında gösterilen uyarı */
+  const [noMovePopup, setNoMovePopup] = useState<string | null>(null);
   const recordedRef = useRef(false);
   /** Seri skoru [Beyaz, Siyah] ve oyun sırası */
   const [series, setSeries] = useState<[number, number]>([0, 0]);
@@ -390,7 +392,8 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
     }
   }, [game, phase, selected, sources, aiTurn]);
 
-  // AI (Bilgisayar) turu: zar at → hamleyi önce vurgula, sonra oyna → gerekirse pas
+  // AI (Bilgisayar) turu: zar at → hamleyi önce vurgula, sonra oyna
+  // (hamle yoksa aşağıdaki otomatik pas akışı devreye girer)
   useEffect(() => {
     if (!aiTurn) return;
     let t: ReturnType<typeof setTimeout>;
@@ -403,7 +406,7 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
         setRollPopup({ dice: [d1, d2], player: AI_PLAYER, key: Date.now() });
         setUndoStack([]);
         setSelected(null);
-      }, 900);
+      }, 1200);
     } else if (legal.length > 0) {
       t = setTimeout(() => {
         const m = chooseMove(game);
@@ -419,15 +422,8 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
         t2 = setTimeout(() => {
           setAiPreview(null);
           setGame(applyMove(game, m));
-        }, 750);
-      }, 650);
-    } else if (game.dice.length > 0) {
-      // Hamle yok: pas
-      t = setTimeout(() => {
-        setGame(endTurn(game));
-        setUndoStack([]);
-        setSelected(null);
-      }, 1100);
+        }, 1300);
+      }, 900);
     }
     return () => {
       clearTimeout(t);
@@ -435,6 +431,31 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
       setAiPreview(null);
     };
   }, [aiTurn, game, legal]);
+
+  // Hamle yapılamıyorsa: uyarı popup'ı göster, sonra sırayı otomatik geçir
+  useEffect(() => {
+    if (
+      phase !== 'playing' ||
+      game.winner !== null ||
+      game.rolled === null ||
+      game.dice.length === 0 ||
+      legal.length > 0
+    )
+      return;
+    const partial =
+      game.dice.length < (game.rolled[0] === game.rolled[1] ? 4 : 2);
+    setNoMovePopup(partial ? 'Kalan zar oynanamıyor' : 'Hamle yapılamıyor');
+    const t = setTimeout(() => {
+      setNoMovePopup(null);
+      setGame(endTurn(ui.current.game));
+      setUndoStack([]);
+      setSelected(null);
+    }, 1700);
+    return () => {
+      clearTimeout(t);
+      setNoMovePopup(null);
+    };
+  }, [phase, game, legal]);
 
   // Zar popup'ı kısa süre sonra kaybolsun
   useEffect(() => {
@@ -463,9 +484,12 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
   // İnsan turu süre sayacı: süre biterse sıra rakibe geçer
   const forfeitRef = useRef(() => {});
   forfeitRef.current = () => {
+    const g = ui.current.game;
+    // Otomatik pas zaten yoldaysa (hamle yok popup'ı) çifte geçiş yapma
+    if (g.rolled && g.dice.length > 0 && legalMoves(g).length === 0) return;
     dragRef.current = null;
     setDragPos(null);
-    setGame(endTurn(ui.current.game));
+    setGame(endTurn(g));
     setUndoStack([]);
     setSelected(null);
   };
@@ -485,12 +509,6 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, aiTurn, game.turn]);
 
-  const mustPass =
-    phase === 'playing' &&
-    game.rolled !== null &&
-    game.dice.length > 0 &&
-    legal.length === 0;
-
   function doRoll() {
     const d1 = randomDie();
     const d2 = randomDie();
@@ -505,12 +523,6 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
     if (!prev) return;
     setUndoStack((s) => s.slice(0, -1));
     setGame(prev);
-    setSelected(null);
-  }
-
-  function doPass() {
-    setGame(endTurn(game));
-    setUndoStack([]);
     setSelected(null);
   }
 
@@ -609,9 +621,7 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
               aiControlled={mode === 'ai' && p === AI_PLAYER}
               offActive={!!offOption && game.turn === p}
               canUndo={undoStack.length > 0}
-              mustPass={mustPass}
               onUndo={doUndo}
-              onPass={doPass}
               onOff={() => onPressOff(p)}
               onOffLayout={(rect) => (offRects.current[p] = rect)}
             />
@@ -678,12 +688,23 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
         />
       )}
 
-      {/* Merkezde Zar At butonu (insan turu, zar atılmadan önce) */}
+      {/* Merkezde Zar At butonu (insan turu, zar atılmadan önce; süre işler) */}
       {phase === 'playing' && game.rolled === null && !aiTurn && (
         <View style={styles.rollOverlay} pointerEvents="box-none">
           <Pressable style={styles.centerRollBtn} onPress={doRoll}>
             <Text style={styles.centerRollText}>🎲 Zar At</Text>
+            <Text style={styles.centerRollTimer}>⏱ {timeLeft} sn</Text>
           </Pressable>
+        </View>
+      )}
+
+      {/* Hamle yapılamıyor uyarısı */}
+      {noMovePopup && (
+        <View style={styles.rollOverlay} pointerEvents="none">
+          <View style={styles.noMoveBox}>
+            <Text style={styles.noMoveText}>⚠️ {noMovePopup}</Text>
+            <Text style={styles.noMoveSub}>sıra rakibe geçiyor…</Text>
+          </View>
         </View>
       )}
 
@@ -708,6 +729,7 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
       {phase === 'opening' && (
         <OpeningOverlay
           opening={opening}
+          aiMode={mode === 'ai'}
           onRoll={() => setOpening({ w: randomDie(), b: randomDie() })}
           onStart={(starter) => {
             setGame(newGame(starter));
@@ -789,16 +811,28 @@ function RollPopup({
 
 function OpeningOverlay({
   opening,
+  aiMode,
   onRoll,
   onStart,
 }: {
   opening: { w: number; b: number } | null;
+  aiMode: boolean;
   onRoll: () => void;
   onStart: (p: Player) => void;
 }) {
   const tie = opening !== null && opening.w === opening.b;
   const starter: Player | null =
     opening && !tie ? (opening.w > opening.b ? 0 : 1) : null;
+  const whiteLabel = aiMode ? 'SEN' : 'Beyaz';
+  const blackLabel = aiMode ? 'Bilgisayar' : 'Siyah';
+  const starterText =
+    starter === null
+      ? ''
+      : aiMode
+        ? starter === 0
+          ? '🎉 Sen başlıyorsun!'
+          : 'Bilgisayar başlıyor'
+        : `${PLAYER_NAMES[starter]} başlıyor`;
   return (
     <View style={styles.overlay}>
       <View style={styles.modal}>
@@ -807,11 +841,13 @@ function OpeningOverlay({
         {opening && (
           <View style={styles.openDice}>
             <View style={styles.openDie}>
-              <Text style={styles.openLabel}>Beyaz</Text>
+              <Text style={[styles.openLabel, aiMode && styles.openLabelYou]}>
+                {whiteLabel}
+              </Text>
               <Die value={opening.w} size={44} />
             </View>
             <View style={styles.openDie}>
-              <Text style={styles.openLabel}>Siyah</Text>
+              <Text style={styles.openLabel}>{blackLabel}</Text>
               <Die value={opening.b} size={44} />
             </View>
           </View>
@@ -819,8 +855,8 @@ function OpeningOverlay({
         {tie && <Text style={styles.modalSub}>Berabere! Tekrar atın.</Text>}
         {starter !== null ? (
           <>
-            <Text style={[styles.modalSub, { color: colors.accent }]}>
-              {PLAYER_NAMES[starter]} başlıyor
+            <Text style={[styles.modalSub, styles.starterText]}>
+              {starterText}
             </Text>
             <Pressable style={styles.primaryBtn} onPress={() => onStart(starter)}>
               <Text style={styles.primaryBtnText}>Başla</Text>
@@ -852,9 +888,7 @@ interface PanelProps {
   aiControlled: boolean;
   offActive: boolean;
   canUndo: boolean;
-  mustPass: boolean;
   onUndo: () => void;
-  onPass: () => void;
   onOff: () => void;
   onOffLayout: (rect: Rect) => void;
 }
@@ -871,9 +905,7 @@ function PlayerPanel({
   aiControlled,
   offActive,
   canUndo,
-  mustPass,
   onUndo,
-  onPass,
   onOff,
   onOffLayout,
 }: PanelProps) {
@@ -902,18 +934,7 @@ function PlayerPanel({
         <Text style={styles.aiThinking}>düşünüyor…</Text>
       ) : null}
 
-      {mustPass && !aiControlled && (
-        <Pressable
-          style={[styles.primaryBtn, { backgroundColor: colors.danger }]}
-          onPress={onPass}
-        >
-          <Text style={styles.primaryBtnText}>
-            {canUndo ? 'Zar oynanamıyor' : 'Hamle yok — Pas'}
-          </Text>
-        </Pressable>
-      )}
-
-      {canUndo && !mustPass && !aiControlled && (
+      {canUndo && !aiControlled && (
         <Pressable style={styles.ghostBtn} onPress={onUndo}>
           <Text style={styles.ghostBtnText}>↩ Geri Al</Text>
         </Pressable>
@@ -1055,6 +1076,33 @@ const styles = StyleSheet.create({
     color: '#33200F',
     fontWeight: '900',
     fontSize: 20,
+  },
+  centerRollTimer: {
+    color: '#33200F',
+    fontWeight: '700',
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 2,
+    opacity: 0.75,
+  },
+  noMoveBox: {
+    backgroundColor: '#241812EE',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1.5,
+    borderColor: colors.danger,
+  },
+  noMoveText: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  noMoveSub: {
+    color: colors.textDim,
+    fontSize: 12,
   },
   countBox: {
     backgroundColor: '#241812EE',
@@ -1333,6 +1381,16 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 13,
     fontWeight: '600',
+  },
+  openLabelYou: {
+    color: colors.accent,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  starterText: {
+    color: colors.accent,
+    fontSize: 15,
+    fontWeight: '800',
   },
   dragChecker: {
     position: 'absolute',

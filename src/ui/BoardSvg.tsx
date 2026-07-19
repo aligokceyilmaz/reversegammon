@@ -257,12 +257,14 @@ export function BoardSvg({
     }
   }
 
-  // Bar üzerindeki el desteleri: Beyaz alt yarıda, Siyah üst yarıda
+  // Bar üzerindeki desteler: oyun başında eldeki pullar, toplama başlayınca
+  // toplanan pullar aynı hazneye geri dolar. Beyaz alt yarıda, Siyah üstte.
   const barC = barX + barW / 2;
   const rb = Math.min(barW * 0.44, r);
   const handStacks: React.ReactNode[] = [];
   for (const p of [0, 1] as const) {
-    const count = state.hand[p];
+    const count = state.hand[p] > 0 ? state.hand[p] : state.borneOff[p];
+    const isHand = state.hand[p] > 0;
     if (count === 0) continue;
     const avail = innerH / 2 - 26;
     const step = count <= 1 ? 0 : Math.min(rb * 0.6, (avail - 2 * rb) / (count - 1));
@@ -281,13 +283,17 @@ export function BoardSvg({
           r={rb}
           player={p}
           ringColor={
-            isTop && isTurn && handSelected
+            isHand && isTop && isTurn && handSelected
               ? colors.highlight
-              : isTop && isTurn && handIsSource
+              : isHand && isTop && isTurn && handIsSource
                 ? colors.dest
                 : undefined
           }
-          ringWidth={isTop && isTurn && (handIsSource || handSelected) ? 3 : undefined}
+          ringWidth={
+            isHand && isTop && isTurn && (handIsSource || handSelected)
+              ? 3
+              : undefined
+          }
         />,
       );
     }
