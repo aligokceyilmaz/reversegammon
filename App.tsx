@@ -6,14 +6,20 @@ import type { GameMode } from './src/ui/GameScreen';
 import { MenuScreen } from './src/ui/MenuScreen';
 
 export default function App() {
-  const [screen, setScreen] = useState<'menu' | GameMode>('menu');
+  const [screen, setScreen] = useState<
+    'menu' | { mode: GameMode; matchLen: number }
+  >('menu');
   return (
     <SafeAreaProvider>
       <StatusBar hidden />
       {screen === 'menu' ? (
-        <MenuScreen onPlay={(mode) => setScreen(mode)} />
+        <MenuScreen onPlay={(mode, matchLen) => setScreen({ mode, matchLen })} />
       ) : (
-        <GameScreen mode={screen} onExit={() => setScreen('menu')} />
+        <GameScreen
+          mode={screen.mode}
+          matchLen={screen.matchLen}
+          onExit={() => setScreen('menu')}
+        />
       )}
     </SafeAreaProvider>
   );

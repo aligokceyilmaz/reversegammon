@@ -1,33 +1,144 @@
 import React, { useEffect, useState } from 'react';
 import {
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
+import { newGame, TOTAL_CHECKERS } from '../engine';
+import type { GameState, Player } from '../engine';
 import { loadProfile, saveProfile, winRate } from '../profile';
 import type { Profile } from '../profile';
+import { BoardSvg } from './BoardSvg';
 import { colors } from './theme';
 
-const RULES = [
-  ['🎲', 'Tahta boş başlar; 15 pulun barın üzerindeki destendedir. Açılışta herkes birer zar atar, yüksek atan başlar.'],
-  ['📥', 'Zar değeriyle pulunu kendi başlangıç bölgesine (1-6 numaralı haneler) sokarsın: 5-2 attıysan 5 ve 2 hanelerine koyabilirsin. Koymak zorunlu değildir; tahtadaki pulunu da ilerletebilirsin.'],
-  ['➕', 'İki zarı aynı pulda birleştirebilirsin (5-2 → 7 ilerleme). Çift zar 4 hamle hakkı verir.'],
-  ['🔒', 'Rakibin TEK pulunun üstüne oturursan onu kilitlersin: üstündeki pul gidene kadar oynayamaz. Üst üste 2 rakip pulu olan hane sana kapalıdır.'],
-  ['🏗️', 'Kule zincirlenebilir: kilitleyen tek pulun üstüne rakip de oturabilir (B,S,B,S...). En üstte aynı renkten 2 pul olunca o hane tamamen kapanır.'],
-  ['🧭', 'Herkes kendi köşesinden girip karşı köşeye doğru ilerler; yollar tamamen çakışır, karşılaşmalar bundan doğar.'],
-  ['🏁', '15 pulunun tamamı karşı bölgeye (son 6 hane) ulaşınca toplama başlar: zarın gösterdiği hanedeki pul toplanır; zar en uzak serbest puldan büyükse en uzaktaki serbest pul toplanır.'],
-  ['🏆', '15 pulunu ilk toplayan oyunu kazanır!'],
-] as const;
+// ---------------------------------------------------------------------------
+// Nasıl Oynanır: mini tahta görselleriyle sayfalı rehber
+// ---------------------------------------------------------------------------
+
+function miniState(
+  stacks: Record<number, Player[]>,
+  hand: [number, number] = [15, 15],
+): GameState {
+  const s = newGame();
+  for (const [pt, stack] of Object.entries(stacks)) {
+    s.points[Number(pt)] = [...stack];
+  }
+  s.hand = [...hand];
+  return s;
+}
+
+interface HowToPage {
+  title: string;
+  text: string;
+  state: GameState;
+  dests?: number[];
+  sources?: number[];
+  selected?: number | null;
+  handGlow?: boolean;
+}
+
+const PAGES: HowToPage[] = [
+  {
+    title: '1 · Boş Tahta, Desteden Başla',
+    text: 'Tahta boş başlar; 15 pulun ortadaki barın üzerindeki destede bekler. Zar değeriyle pulunu KENDİ bölgene (sağ alttaki 1-6 numaralı haneler) sokarsın. Örn. 5-2 attıysan 5 ve 2 hanelerine koyabilirsin.',
+    state: miniState({}),
+    dests: [4, 1],
+    handGlow: true,
+  },
+  {
+    title: '2 · İlerle ve Birleştir',
+    text: 'Koymak zorunlu değilsin: tahtadaki pulunu da ilerletebilirsin. İki zarı aynı pulda birleştirmek de serbest (5-2 → toplam 7). Çift zar 4 hamle demektir.',
+    state: miniState({ 8: [0, 0] }, [13, 15]),
+    sources: [8],
+    selected: 8,
+    dests: [10, 13, 15],
+  },
+  {
+    title: '3 · Kilitle!',
+    text: 'Rakibin TEK pulunun üstüne oturursan onu KİLİTLERSİN: üstündeki pul gidene kadar oynayamaz. Soldaki kulede beyaz, siyahı kilitlemiş. Üst üste 2 rakip pulu olan hane ise sana kapalıdır.',
+    state: miniState({ 9: [1, 0], 14: [1, 1] }, [14, 12]),
+  },
+  {
+    title: '4 · Kule Zinciri',
+    text: 'Kilitleyen tek pulun üstüne rakip de oturabilir: kuleler zincirlenir (siyah-beyaz-siyah...). En üstte aynı renkten 2 pul olduğu anda o hane tamamen kapanır ve alttakiler bekler.',
+    state: miniState({ 10: [1, 0, 1], 16: [1, 0, 0] }, [12, 12]),
+  },
+  {
+    title: '5 · Topla ve Kazan',
+    text: '15 pulunun tamamı karşı bölgeye (son 6 hane) ulaşınca toplama başlar: zar değerine göre pullar tahtadan çıkar. 15 pulunu ilk toplayan oyunu kazanır!',
+    state: (() => {
+      const s = miniState(
+        { 18: [0, 0, 0], 20: [0, 0], 22: [0] },
+        [0, 15],
+      );
+      s.borneOff[0] = TOTAL_CHECKERS - 6;
+      return s;
+    })(),
+    sources: [22],
+    selected: 22,
+  },
+];
+
+function HowToPlay({ onClose }: { onClose: () => void }) {
+  const [page, setPage] = useState(0);
+  const { width, height } = useWindowDimensions();
+  const p = PAGES[page];
+  const bw = Math.min(width - 48, 340);
+  const bh = Math.min(height * 0.5, 420);
+  return (
+    <View style={styles.howtoOverlay}>
+      <Text style={styles.howtoTitle}>{p.title}</Text>
+      <BoardSvg
+        state={p.state}
+        width={bw}
+        height={bh}
+        sourcePoints={new Set(p.sources ?? [])}
+        selectedPoint={p.selected ?? null}
+        destPoints={new Set(p.dests ?? [])}
+        handIsSource={!!p.handGlow}
+        handSelected={!!p.handGlow}
+      />
+      <Text style={styles.howtoText}>{p.text}</Text>
+      <View style={styles.howtoNav}>
+        <Pressable
+          style={[styles.ghostBtn, page === 0 && { opacity: 0.3 }]}
+          disabled={page === 0}
+          onPress={() => setPage(page - 1)}
+        >
+          <Text style={styles.ghostBtnText}>‹ Geri</Text>
+        </Pressable>
+        <Text style={styles.howtoCount}>
+          {page + 1}/{PAGES.length}
+        </Text>
+        {page < PAGES.length - 1 ? (
+          <Pressable style={styles.smallBtn} onPress={() => setPage(page + 1)}>
+            <Text style={styles.smallBtnText}>İleri ›</Text>
+          </Pressable>
+        ) : (
+          <Pressable style={styles.smallBtn} onPress={onClose}>
+            <Text style={styles.smallBtnText}>Bitti ✓</Text>
+          </Pressable>
+        )}
+      </View>
+      <Pressable onPress={onClose} style={styles.howtoClose} hitSlop={10}>
+        <Text style={styles.howtoCloseText}>✕</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
 
 interface Props {
-  onPlay: (mode: 'pvp' | 'ai') => void;
+  onPlay: (mode: 'pvp' | 'ai', matchLen: number) => void;
 }
 
 export function MenuScreen({ onPlay }: Props) {
   const [showRules, setShowRules] = useState(false);
+  const [matchLen, setMatchLen] = useState(1);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [nameInput, setNameInput] = useState('');
   const [editingName, setEditingName] = useState(false);
@@ -89,31 +200,38 @@ export function MenuScreen({ onPlay }: Props) {
           </View>
         ))}
 
-      <Pressable style={styles.primaryBtn} onPress={() => onPlay('ai')}>
+      {/* Seri uzunluğu */}
+      <View style={styles.seriesRow}>
+        <Text style={styles.seriesLabel}>Seri:</Text>
+        {[1, 3, 5].map((n) => (
+          <Pressable
+            key={n}
+            style={[styles.seriesChip, matchLen === n && styles.seriesChipOn]}
+            onPress={() => setMatchLen(n)}
+          >
+            <Text
+              style={[
+                styles.seriesChipText,
+                matchLen === n && styles.seriesChipTextOn,
+              ]}
+            >
+              {n} Oyun
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <Pressable style={styles.primaryBtn} onPress={() => onPlay('ai', matchLen)}>
         <Text style={styles.primaryBtnText}>🤖 Tek Kişilik</Text>
       </Pressable>
-      <Pressable style={styles.primaryBtn} onPress={() => onPlay('pvp')}>
+      <Pressable style={styles.primaryBtn} onPress={() => onPlay('pvp', matchLen)}>
         <Text style={styles.primaryBtnText}>👥 2 Kişi (aynı telefon)</Text>
       </Pressable>
-      <Pressable style={styles.ghostBtn} onPress={() => setShowRules(!showRules)}>
-        <Text style={styles.ghostBtnText}>
-          {showRules ? 'Kuralları Gizle' : '❓ Nasıl Oynanır?'}
-        </Text>
+      <Pressable style={styles.ghostBtn} onPress={() => setShowRules(true)}>
+        <Text style={styles.ghostBtnText}>❓ Nasıl Oynanır?</Text>
       </Pressable>
 
-      {showRules && (
-        <ScrollView
-          style={styles.rules}
-          contentContainerStyle={{ gap: 10, padding: 14 }}
-        >
-          {RULES.map(([icon, text], i) => (
-            <View key={i} style={styles.ruleRow}>
-              <Text style={styles.ruleIcon}>{icon}</Text>
-              <Text style={styles.ruleText}>{text}</Text>
-            </View>
-          ))}
-        </ScrollView>
-      )}
+      {showRules && <HowToPlay onClose={() => setShowRules(false)} />}
     </View>
   );
 }
@@ -184,6 +302,34 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 15,
   },
+  seriesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  seriesLabel: {
+    color: colors.textDim,
+    fontSize: 14,
+  },
+  seriesChip: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.textDim,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+  },
+  seriesChipOn: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  seriesChipText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  seriesChipTextOn: {
+    color: '#33200F',
+  },
   smallBtn: {
     backgroundColor: colors.accent,
     borderRadius: 8,
@@ -219,25 +365,55 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 14,
   },
-  rules: {
-    maxHeight: 260,
-    maxWidth: 620,
-    alignSelf: 'stretch',
-    backgroundColor: colors.frame,
-    borderRadius: 12,
+  howtoOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    gap: 14,
   },
-  ruleRow: {
-    flexDirection: 'row',
-    gap: 10,
-    alignItems: 'flex-start',
-  },
-  ruleIcon: {
+  howtoTitle: {
+    color: colors.accent,
     fontSize: 18,
+    fontWeight: '800',
+    textAlign: 'center',
   },
-  ruleText: {
+  howtoText: {
     color: colors.text,
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: 'center',
+    maxWidth: 480,
+  },
+  howtoNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 18,
+  },
+  howtoCount: {
+    color: colors.textDim,
     fontSize: 13,
-    flex: 1,
-    lineHeight: 19,
+    fontWeight: '700',
+  },
+  howtoClose: {
+    position: 'absolute',
+    top: 18,
+    right: 20,
+    backgroundColor: '#00000055',
+    borderRadius: 999,
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  howtoCloseText: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

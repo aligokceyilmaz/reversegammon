@@ -23,10 +23,10 @@ import {
 } from '../engine';
 import type { DestOption, GameState, MoveSource, Player } from '../engine';
 import { chooseMove } from '../engine/ai';
-import { recordAiResult } from '../profile';
+import { loadProfile, recordAiResult } from '../profile';
 import { BoardSvg, boardGeometry } from './BoardSvg';
 import { Die } from './Dice';
-import { AI_NAME, colors, PLAYER_NAMES } from './theme';
+import { colors, PLAYER_NAMES } from './theme';
 
 type Phase = 'opening' | 'playing' | 'over';
 
@@ -49,14 +49,19 @@ export type GameMode = 'pvp' | 'ai';
 
 interface Props {
   mode: GameMode;
+  /** Seri uzunluğu: 1, 3 veya 5 oyun */
+  matchLen: number;
   onExit: () => void;
 }
 
 /** AI her zaman Siyah (oyuncu 1) olarak oynar */
 const AI_PLAYER: Player = 1;
 const EMPTY_POINTS: ReadonlySet<number> = new Set();
+/** Tur süresi (sn); test kancası ile değiştirilebilir */
+const TURN_SECONDS =
+  (globalThis as { __TURN_SECONDS__?: number }).__TURN_SECONDS__ ?? 15;
 
-export function GameScreen({ mode, onExit }: Props) {
+export function GameScreen({ mode, matchLen, onExit }: Props) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [phase, setPhase] = useState<Phase>('opening');
@@ -77,6 +82,25 @@ export function GameScreen({ mode, onExit }: Props) {
     dest: number | 'off';
   } | null>(null);
   const recordedRef = useRef(false);
+  /** Seri skoru [Beyaz, Siyah] ve oyun sırası */
+  const [series, setSeries] = useState<[number, number]>([0, 0]);
+  const [gameNo, setGameNo] = useState(1);
+  const seriesRecordedRef = useRef(false);
+  /** Seriyi kazanmak için gereken galibiyet */
+  const target = Math.floor(matchLen / 2) + 1;
+  /** Kullanıcı adı (Beyaz'ın etiketi için) */
+  const [profileName, setProfileName] = useState('');
+  /** Tur süresi geri sayımı */
+  const [timeLeft, setTimeLeft] = useState(TURN_SECONDS);
+
+  useEffect(() => {
+    loadProfile().then((p) => setProfileName(p.name));
+  }, []);
+
+  function nameFor(p: Player): string {
+    if (p === 0) return profileName ? `Beyaz (${profileName})` : 'Beyaz';
+    return mode === 'ai' ? 'Siyah (Bilgisayar)' : 'Siyah';
+  }
 
   // --- Boyutlar (çentik/safe-area dahil, küçük ekranlara sığacak şekilde) ---
   const portrait = height > width;
@@ -427,6 +451,40 @@ export function GameScreen({ mode, onExit }: Props) {
     }
   }, [phase, mode, game.winner]);
 
+  // Biten oyunu seri skoruna işle (bir kez)
+  useEffect(() => {
+    if (phase === 'over' && game.winner !== null && !seriesRecordedRef.current) {
+      seriesRecordedRef.current = true;
+      const w = game.winner;
+      setSeries((s) => (w === 0 ? [s[0] + 1, s[1]] : [s[0], s[1] + 1]));
+    }
+  }, [phase, game.winner]);
+
+  // İnsan turu süre sayacı: süre biterse sıra rakibe geçer
+  const forfeitRef = useRef(() => {});
+  forfeitRef.current = () => {
+    dragRef.current = null;
+    setDragPos(null);
+    setGame(endTurn(ui.current.game));
+    setUndoStack([]);
+    setSelected(null);
+  };
+  useEffect(() => {
+    if (phase !== 'playing' || aiTurn || game.winner !== null) return;
+    setTimeLeft(TURN_SECONDS);
+    const started = Date.now();
+    const iv = setInterval(() => {
+      const rem = TURN_SECONDS - Math.floor((Date.now() - started) / 1000);
+      setTimeLeft(Math.max(rem, 0));
+      if (rem <= 0) {
+        clearInterval(iv);
+        forfeitRef.current();
+      }
+    }, 250);
+    return () => clearInterval(iv);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, aiTurn, game.turn]);
+
   const mustPass =
     phase === 'playing' &&
     game.rolled !== null &&
@@ -461,7 +519,8 @@ export function GameScreen({ mode, onExit }: Props) {
     doApplyOption(offOption);
   }
 
-  function restart() {
+  /** Tahtayı sıfırla (seri skoru korunur) */
+  function resetBoard() {
     setPhase('opening');
     setOpening(null);
     setGame(newGame());
@@ -470,9 +529,23 @@ export function GameScreen({ mode, onExit }: Props) {
     setAiPreview(null);
     setRollPopup(null);
     recordedRef.current = false;
+    seriesRecordedRef.current = false;
   }
 
-  const turnName = PLAYER_NAMES[game.turn];
+  /** Serideki bir sonraki oyuna geç */
+  function nextGame() {
+    setGameNo((n) => n + 1);
+    resetBoard();
+  }
+
+  /** Yeni seri başlat */
+  function newSeries() {
+    setSeries([0, 0]);
+    setGameNo(1);
+    resetBoard();
+  }
+
+  const matchOver = series[0] >= target || series[1] >= target;
   const dragR = Math.max(geo.r, 16);
 
   return (
@@ -489,7 +562,7 @@ export function GameScreen({ mode, onExit }: Props) {
     >
       <View style={[styles.banner, { height: bannerH }]}>
         <Pressable onPress={onExit} hitSlop={8} style={styles.menuBtnBox}>
-          <Text style={styles.menuBtnText}>‹ Menü</Text>
+          <Text style={styles.menuBtnText}>☰ Menü</Text>
         </Pressable>
         <View style={styles.turnWrap}>
           <View
@@ -501,13 +574,23 @@ export function GameScreen({ mode, onExit }: Props) {
               },
             ]}
           />
-          <Text style={styles.turnText}>
-            {phase === 'playing'
-              ? `Sıra: ${mode === 'ai' && game.turn === AI_PLAYER ? AI_NAME : turnName}`
-              : 'ALVAT'}
+          <Text style={styles.turnText} numberOfLines={1}>
+            {phase === 'playing' ? nameFor(game.turn) : 'ALVAT'}
+          </Text>
+          {phase === 'playing' && !aiTurn && (
+            <Text
+              style={[styles.timerText, timeLeft <= 5 && { color: colors.danger }]}
+            >
+              ⏱{timeLeft}
+            </Text>
+          )}
+        </View>
+        <View style={styles.scoreChip}>
+          <Text style={styles.scoreText}>
+            {series[0]}–{series[1]}
+            {matchLen > 1 ? `  ·  ${gameNo}/${matchLen}` : ''}
           </Text>
         </View>
-        <View style={styles.menuBtnSpacer} />
       </View>
 
       <View style={portrait ? styles.col : styles.row}>
@@ -516,6 +599,7 @@ export function GameScreen({ mode, onExit }: Props) {
             <PlayerPanel
               key={`p${p}`}
               player={p}
+              name={nameFor(p)}
               game={game}
               phase={phase}
               horizontal={portrait}
@@ -526,7 +610,6 @@ export function GameScreen({ mode, onExit }: Props) {
               offActive={!!offOption && game.turn === p}
               canUndo={undoStack.length > 0}
               mustPass={mustPass}
-              onRoll={doRoll}
               onUndo={doUndo}
               onPass={doPass}
               onOff={() => onPressOff(p)}
@@ -595,16 +678,30 @@ export function GameScreen({ mode, onExit }: Props) {
         />
       )}
 
+      {/* Merkezde Zar At butonu (insan turu, zar atılmadan önce) */}
+      {phase === 'playing' && game.rolled === null && !aiTurn && (
+        <View style={styles.rollOverlay} pointerEvents="box-none">
+          <Pressable style={styles.centerRollBtn} onPress={doRoll}>
+            <Text style={styles.centerRollText}>🎲 Zar At</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {/* Son 5 saniye geri sayımı */}
+      {phase === 'playing' && !aiTurn && game.winner === null && timeLeft <= 5 && timeLeft > 0 && (
+        <View style={styles.rollOverlay} pointerEvents="none">
+          <View style={styles.countBox}>
+            <Text style={styles.countText}>{timeLeft}</Text>
+          </View>
+        </View>
+      )}
+
       {/* Zar atma popup'ı */}
       {rollPopup && (
         <RollPopup
           key={rollPopup.key}
           dice={rollPopup.dice}
-          playerName={
-            mode === 'ai' && rollPopup.player === AI_PLAYER
-              ? AI_NAME
-              : PLAYER_NAMES[rollPopup.player]
-          }
+          playerName={nameFor(rollPopup.player)}
         />
       )}
 
@@ -623,12 +720,24 @@ export function GameScreen({ mode, onExit }: Props) {
         <View style={styles.overlay}>
           <View style={styles.modal}>
             <Text style={styles.modalTitle}>
-              🏆 {PLAYER_NAMES[game.winner]} kazandı!
+              🏆 {nameFor(game.winner)} {matchOver && matchLen > 1 ? 'seriyi kazandı!' : 'kazandı!'}
             </Text>
-            <Text style={styles.modalSub}>15 pulunu ilk toplayan oldu.</Text>
-            <Pressable style={styles.primaryBtn} onPress={restart}>
-              <Text style={styles.primaryBtnText}>Yeni Oyun</Text>
-            </Pressable>
+            <Text style={styles.modalSub}>
+              {matchLen > 1
+                ? `Seri durumu: ${series[0]} – ${series[1]} (${matchLen} oyunluk seri)`
+                : '15 pulunu ilk toplayan oldu.'}
+            </Text>
+            {matchOver ? (
+              <Pressable style={styles.primaryBtn} onPress={newSeries}>
+                <Text style={styles.primaryBtnText}>Yeni Seri</Text>
+              </Pressable>
+            ) : (
+              <Pressable style={styles.primaryBtn} onPress={nextGame}>
+                <Text style={styles.primaryBtnText}>
+                  {matchLen > 1 ? `Sonraki Oyun (${gameNo + 1}/${matchLen})` : 'Yeni Oyun'}
+                </Text>
+              </Pressable>
+            )}
             <Pressable style={styles.ghostBtn} onPress={onExit}>
               <Text style={styles.ghostBtnText}>Menüye Dön</Text>
             </Pressable>
@@ -733,6 +842,7 @@ function OpeningOverlay({
 
 interface PanelProps {
   player: Player;
+  name: string;
   game: GameState;
   phase: Phase;
   horizontal: boolean;
@@ -743,7 +853,6 @@ interface PanelProps {
   offActive: boolean;
   canUndo: boolean;
   mustPass: boolean;
-  onRoll: () => void;
   onUndo: () => void;
   onPass: () => void;
   onOff: () => void;
@@ -752,6 +861,7 @@ interface PanelProps {
 
 function PlayerPanel({
   player,
+  name,
   game,
   phase,
   horizontal,
@@ -762,7 +872,6 @@ function PlayerPanel({
   offActive,
   canUndo,
   mustPass,
-  onRoll,
   onUndo,
   onPass,
   onOff,
@@ -791,11 +900,7 @@ function PlayerPanel({
         </View>
       ) : aiControlled ? (
         <Text style={styles.aiThinking}>düşünüyor…</Text>
-      ) : (
-        <Pressable style={styles.primaryBtn} onPress={onRoll}>
-          <Text style={styles.primaryBtnText}>🎲 Zar At</Text>
-        </Pressable>
-      )}
+      ) : null}
 
       {mustPass && !aiControlled && (
         <Pressable
@@ -859,7 +964,7 @@ function PlayerPanel({
         <View style={styles.panelHLeft}>
           <View style={styles.panelHeader}>
             <View style={[styles.turnDot, { backgroundColor: checkerColor }]} />
-            <Text style={styles.panelName}>{aiControlled ? AI_NAME : PLAYER_NAMES[player]}</Text>
+            <Text style={styles.panelName} numberOfLines={1}>{name}</Text>
           </View>
           {handCount > 0 && (
             <Text style={styles.handCountText}>Elde {handCount}</Text>
@@ -875,7 +980,7 @@ function PlayerPanel({
     <View style={[styles.panel, { width }, isTurn && styles.panelActive]}>
       <View style={styles.panelHeader}>
         <View style={[styles.turnDot, { backgroundColor: checkerColor }]} />
-        <Text style={styles.panelName}>{aiControlled ? AI_NAME : PLAYER_NAMES[player]}</Text>
+        <Text style={styles.panelName} numberOfLines={1}>{name}</Text>
       </View>
       {handCount > 0 && (
         <Text style={styles.handCountText}>Elde {handCount} pul (barda)</Text>
@@ -914,8 +1019,57 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-  menuBtnSpacer: {
-    width: 64,
+  timerText: {
+    color: colors.textDim,
+    fontSize: 13,
+    fontWeight: '700',
+    marginLeft: 4,
+  },
+  scoreChip: {
+    backgroundColor: '#00000055',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: colors.brass,
+  },
+  scoreText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  centerRollBtn: {
+    backgroundColor: colors.accent,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 34,
+    borderWidth: 2,
+    borderColor: '#00000044',
+    shadowColor: '#000',
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  centerRollText: {
+    color: '#33200F',
+    fontWeight: '900',
+    fontSize: 20,
+  },
+  countBox: {
+    backgroundColor: '#241812EE',
+    borderRadius: 999,
+    width: 84,
+    height: 84,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: colors.danger,
+  },
+  countText: {
+    color: colors.danger,
+    fontSize: 42,
+    fontWeight: '900',
   },
   rollOverlay: {
     position: 'absolute',

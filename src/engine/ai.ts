@@ -9,20 +9,44 @@ import type { GameState, Move, Player } from './types';
  * yalnız pulu sürmekten her zaman daha değerlidir.
  */
 export function chooseMove(state: GameState): Move | null {
-  const moves = legalMoves(state);
-  if (moves.length === 0) return null;
-  const p = state.turn;
+  return planTurn(state)[0] ?? null;
+}
 
-  let best: Move = moves[0];
+/**
+ * Turun tamamını planlar: zar dizilerinin en iyi bitiş pozisyonunu arar
+ * (ışın araması: her adımda en umut verici 6 hamle dallanır). Böylece AI
+ * "önce şunu sokayım, sonra onunla kilitleyeyim" gibi insansı kombinasyonlar
+ * kurabilir; hamleler tek tek açgözlü seçilmez.
+ */
+export function planTurn(state: GameState): Move[] {
+  const p = state.turn;
+  let bestSeq: Move[] = [];
   let bestScore = -Infinity;
-  for (const m of moves) {
-    const s = evaluate(applyMove(state, m), p) + Math.random() * 0.01;
-    if (s > bestScore) {
-      bestScore = s;
-      best = m;
+
+  function dfs(s: GameState, seq: Move[]) {
+    const moves = legalMoves(s);
+    if (moves.length === 0) {
+      const score = evaluate(s, p);
+      if (score > bestScore) {
+        bestScore = score;
+        bestSeq = seq;
+      }
+      return;
+    }
+    const scored = moves
+      .map((m) => {
+        const next = applyMove(s, m);
+        return { m, next, score: evaluate(next, p) };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 6);
+    for (const { m, next } of scored) {
+      dfs(next, [...seq, m]);
     }
   }
-  return best;
+
+  dfs(state, []);
+  return bestSeq;
 }
 
 /** Pozisyonun p oyuncusu için değeri (büyük = iyi) */
