@@ -121,7 +121,7 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
   const padR = pad + insets.right;
   const padT = pad + insets.top;
   const padB = pad + insets.bottom;
-  const bannerH = 26;
+  const bannerH = portrait ? 56 : 42; // skorboard başlık
   // Dikeyde paneller üstte/altta yatay şerit, yatayda solda/sağda dikey sütun
   const panelW = Math.max(92, Math.min(width * 0.15, 140));
   const panelH = Math.max(64, Math.min(height * 0.11, 92));
@@ -591,47 +591,67 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
       ]}
     >
       <View style={[styles.banner, { height: bannerH }]}>
-        <Pressable onPress={onExit} hitSlop={8} style={styles.menuBtnBox}>
-          <Text style={styles.menuBtnText}>☰ Menü</Text>
+        <Pressable onPress={onExit} hitSlop={8} style={styles.iconBtn}>
+          <Text style={styles.iconBtnText}>☰</Text>
         </Pressable>
-        <View style={styles.turnWrap}>
+
+        {/* Skorboard: sol Beyaz (sen), ortada skor, sağ rakip */}
+        <View style={styles.scoreboard}>
           <View
             style={[
-              styles.turnDot,
-              {
-                backgroundColor:
-                  game.turn === 0 ? colors.whiteChecker : colors.blackChecker,
-              },
+              styles.sbSide,
+              phase === 'playing' && game.turn === 0 && styles.sbSideActive,
             ]}
-          />
-          <Text style={styles.turnText} numberOfLines={1}>
-            {phase === 'playing' ? nameFor(game.turn) : 'ALVAT'}
-          </Text>
-          {phase === 'playing' && !aiTurn && (
-            <Text
-              style={[styles.timerText, timeLeft <= 5 && { color: colors.danger }]}
-            >
-              ⏱{timeLeft}
+          >
+            <Text style={styles.sbAvatar}>{profileAvatar || '⚪'}</Text>
+            <Text style={styles.sbName} numberOfLines={1}>
+              {profileName || 'Beyaz'}
             </Text>
-          )}
-        </View>
-        <View style={styles.bannerRight}>
-          <View style={styles.scoreChip}>
-            <Text style={styles.scoreText}>
-              {series[0]}–{series[1]}
-              {matchLen > 1 ? `  ·  ${gameNo}/${matchLen}` : ''}
-            </Text>
+            {phase === 'playing' && game.turn === 0 && !aiTurn && (
+              <Text
+                style={[styles.sbTimer, timeLeft <= 5 && { color: colors.danger }]}
+              >
+                ⏱{timeLeft}
+              </Text>
+            )}
           </View>
-          {phase === 'playing' && (
-            <Pressable
-              onPress={() => setPaused(true)}
-              hitSlop={8}
-              style={styles.pauseBtn}
-            >
-              <Text style={styles.pauseBtnText}>⏸</Text>
-            </Pressable>
-          )}
+          <View style={styles.sbScore}>
+            <Text style={styles.sbScoreText}>
+              {series[0]} – {series[1]}
+            </Text>
+            {matchLen > 1 && (
+              <Text style={styles.sbScoreSub}>
+                Oyun {gameNo}/{matchLen}
+              </Text>
+            )}
+          </View>
+          <View
+            style={[
+              styles.sbSide,
+              phase === 'playing' && game.turn === 1 && styles.sbSideActive,
+            ]}
+          >
+            <Text style={styles.sbAvatar}>{mode === 'ai' ? '🤖' : '⚫'}</Text>
+            <Text style={styles.sbName} numberOfLines={1}>
+              {mode === 'ai' ? 'Bilgisayar' : 'Siyah'}
+            </Text>
+            {phase === 'playing' && game.turn === 1 && !aiTurn && (
+              <Text
+                style={[styles.sbTimer, timeLeft <= 5 && { color: colors.danger }]}
+              >
+                ⏱{timeLeft}
+              </Text>
+            )}
+          </View>
         </View>
+
+        <Pressable
+          onPress={() => phase === 'playing' && setPaused(true)}
+          hitSlop={8}
+          style={[styles.iconBtn, phase !== 'playing' && { opacity: 0.35 }]}
+        >
+          <Text style={styles.iconBtnText}>⏸</Text>
+        </Pressable>
       </View>
 
       <View style={portrait ? styles.col : styles.row}>
@@ -1075,18 +1095,77 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 4,
   },
-  menuBtnBox: {
-    backgroundColor: '#00000055',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderWidth: 1,
-    borderColor: '#FFFFFF22',
+  iconBtn: {
+    backgroundColor: '#00000066',
+    borderRadius: 22,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF25',
   },
-  menuBtnText: {
+  iconBtnText: {
     color: colors.text,
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: '700',
+  },
+  scoreboard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#00000044',
+    borderRadius: 14,
+    marginHorizontal: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#FFFFFF18',
+    gap: 4,
+  },
+  sbSide: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    borderRadius: 10,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  sbSideActive: {
+    borderColor: colors.accent,
+    backgroundColor: '#00000044',
+  },
+  sbAvatar: {
+    fontSize: 17,
+  },
+  sbName: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '700',
+    flexShrink: 1,
+  },
+  sbTimer: {
+    color: colors.accent,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  sbScore: {
+    alignItems: 'center',
+    paddingHorizontal: 6,
+  },
+  sbScoreText: {
+    color: colors.brass,
+    fontSize: 19,
+    fontWeight: '900',
+  },
+  sbScoreSub: {
+    color: colors.textDim,
+    fontSize: 9,
+    marginTop: -2,
   },
   bannerRight: {
     flexDirection: 'row',

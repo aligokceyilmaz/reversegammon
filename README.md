@@ -31,5 +31,15 @@ npx tsc --noEmit  # tip kontrolü
 
 Proje yapısı:
 
-- `src/engine/` — UI'dan bağımsız oyun motoru (kurallar, hamle üretimi, kilit mantığı) + testleri
+- `src/engine/` — UI'dan bağımsız oyun motoru (kurallar, hamle üretimi, kilit mantığı, AI) + testleri
 - `src/ui/` — tahta çizimi (react-native-svg), oyun ekranı, menü
+- `assets/tema-mevcut.png` — mevcut oyun ekranının görüntüsü (tema tasarımı için referans; yeni tasarım bu dosya üzerine yüklenip uygulanır)
+
+## Yol Haritası (v2+)
+
+- [ ] **Modern tema** — kullanıcı `assets` klasörüne tasarım görseli yükleyecek, arka plan ve tahta ona göre giydirilecek
+- [ ] **Online mod (Firebase)** — menüye Online seçeneği; anonim giriş + canlı rastgele eşleşme + basit istatistik (oyun/galibiyet/%)
+- [ ] **Tablet düzeni** — telefon sonrası tablete özel yerleşim
+- [ ] **EAS build + mağaza** — Apple Developer ve Google Play hesapları hazır; "BACKGAMMON - ALVAT" adıyla yükleme
+- [ ] **Reklam** — oyun araları tam ekran video (AdMob, build aşamasında; Expo Go'da çalışmaz)
+- [ ] **Pro üyelik** — reklamsız oynama + ekstra özellikler (avatar paketi vb.), reklam istemeyenler için
