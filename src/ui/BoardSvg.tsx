@@ -192,7 +192,6 @@ export function BoardSvg({
 
   const triangles: React.ReactNode[] = [];
   const checkers: React.ReactNode[] = [];
-  const destGlows: React.ReactNode[] = [];
   const destDots: React.ReactNode[] = [];
 
   for (let i = 0; i < 24; i++) {
@@ -213,12 +212,6 @@ export function BoardSvg({
         strokeWidth={1}
       />,
     );
-
-    if (isDest) {
-      destGlows.push(
-        <Polygon key={`d${i}`} points={triPts} fill={colors.dest} opacity={0.42} />,
-      );
-    }
 
     const stack = state.points[i];
     const n = stack.length;
@@ -248,17 +241,22 @@ export function BoardSvg({
     });
 
     if (isDest) {
+      // Hedef işareti: pulun ineceği noktada belirgin bir halka+nokta
+      // (üçgen boyama yok; her temada sütun merkezine hizalı kalır)
       const off = Math.min(r + 4 + n * step + (n > 0 ? r * 0.4 : 0), halfLen);
+      const cy = by + dy * off;
       destDots.push(
-        <Circle
-          key={`dd${i}`}
-          cx={bx}
-          cy={by + dy * off}
-          r={r * 0.45}
-          fill={colors.dest}
-          stroke="#FFFFFF"
-          strokeWidth={1.5}
-        />,
+        <React.Fragment key={`dd${i}`}>
+          <Circle cx={bx} cy={cy} r={r * 0.82} fill={colors.dest} opacity={0.28} />
+          <Circle
+            cx={bx}
+            cy={cy}
+            r={r * 0.5}
+            fill={colors.dest}
+            stroke="#FFFFFF"
+            strokeWidth={2}
+          />
+        </React.Fragment>,
       );
     }
   }
@@ -380,11 +378,15 @@ export function BoardSvg({
       {background && (
         <Image
           source={background}
-          style={{ position: 'absolute', width, height }}
+          style={{ position: 'absolute', top: 0, left: 0, width, height }}
           resizeMode="stretch"
         />
       )}
-      <Svg width={width} height={height}>
+      <Svg
+        width={width}
+        height={height}
+        style={background ? { position: 'absolute', top: 0, left: 0 } : undefined}
+      >
         <Defs>
           <LinearGradient id="wood" x1="0" y1="0" x2="0" y2="1">
             <Stop offset="0" stopColor="#5E4128" />
@@ -460,7 +462,6 @@ export function BoardSvg({
             {labels}
           </>
         )}
-        {destGlows}
         {checkers}
         {handStacks}
         {destDots}
