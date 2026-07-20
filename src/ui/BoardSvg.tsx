@@ -43,7 +43,9 @@ export function boardGeometry(width: number, height: number) {
   const innerH = height - fp * 2;
   const pw = innerW / 13; // 12 hane + bar
   const barW = pw;
-  const r = Math.min(pw * 0.46, 30); // pul yarıçapı
+  // Pul yarıçapı: parmakla rahat tutulsun diye hane genişliğinden biraz taşar
+  // (gerçek tavla uygulamalarındaki gibi); dokunma alanı zaten tüm sütundur
+  const r = Math.min(pw * 0.58, 34);
   const triLen = innerH * 0.4;
   const halfLen = innerH / 2 - 4;
   const barX = fp + 6 * pw; // barın sol kenarı
@@ -260,7 +262,7 @@ export function BoardSvg({
   // Bar üzerindeki desteler: oyun başında eldeki pullar, toplama başlayınca
   // toplanan pullar aynı hazneye geri dolar. Beyaz alt yarıda, Siyah üstte.
   const barC = barX + barW / 2;
-  const rb = Math.min(barW * 0.44, r);
+  const rb = Math.min(barW * 0.54, r); // deste pulları da parmağa uygun boyda
   const handStacks: React.ReactNode[] = [];
   for (const p of [0, 1] as const) {
     const count = state.hand[p] > 0 ? state.hand[p] : state.borneOff[p];

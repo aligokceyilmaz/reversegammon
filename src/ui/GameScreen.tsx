@@ -575,7 +575,8 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
   }
 
   const matchOver = series[0] >= target || series[1] >= target;
-  const dragR = Math.max(geo.r, 16);
+  // Sürüklenen pul parmağın altında kalmasın diye biraz daha büyük
+  const dragR = Math.max(geo.r * 1.15, 20);
 
   return (
     <View
