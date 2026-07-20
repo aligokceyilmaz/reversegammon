@@ -51,11 +51,10 @@ const PAGES: HowToPage[] = [
   },
   {
     title: '2 · İlerle ve Birleştir',
-    text: 'Örn. 5+2 attın: pulunun önce 5 ilerisi, sonra onun 2 ilerisi işaretlenir (yeşiller). Gelen 5 zarını oynadıktan sonra 2 ilerletmek yerine, pulunu DİREKT zarların toplamı kadar (7) da taşıyabilirsin. Çift zarda (örn. 4-4) aynı değerden 4 hamle hakkın olur: 4 pul sokabilir ya da aynı pulu 4 kez ilerletebilirsin.',
+    text: 'Elindeki pulları istersen tek tek, istersen gelen zarların TOPLAMI kadar direkt koyabilirsin. Örn. 5+2 attın: pulunu 5 hanesine koyup 2 ilerletirsin — ya da tek harekette toplam 7 ilerisine koyarsın. Yeşiller: önce 5 hanesi, sonra onun 2 ilerisi. Çift zarda da aynı mantık: 4-4 attıysan 4 hamle hakkın var; aynı pulu 4+4 ya da 4+4+4 ileriye tek seferde taşıyabilirsin. Koymak zorunlu da değil; tahtadaki pulunu da ilerletebilirsin.',
     state: miniState({ 8: [0, 0] }, [13, 15]),
-    sources: [8],
-    selected: 8,
-    dests: [13, 15],
+    dests: [4, 6],
+    handGlow: true,
   },
   {
     title: '3 · Kilitle!',
