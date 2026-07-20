@@ -1,5 +1,6 @@
 import React from 'react';
-import { View } from 'react-native';
+import { Image, View } from 'react-native';
+import type { ImageSourcePropType } from 'react-native';
 import Svg, {
   Circle,
   Defs,
@@ -27,6 +28,8 @@ interface Props {
   /** Sıradaki oyuncunun eldeki (bardaki) pulları oynanabilir mi / seçili mi */
   handIsSource: boolean;
   handSelected: boolean;
+  /** Tema arka plan görseli; verilirse vektörel tahta çizilmez */
+  background?: ImageSourcePropType | null;
 }
 
 /**
@@ -182,6 +185,7 @@ export function BoardSvg({
   destPoints,
   handIsSource,
   handSelected,
+  background,
 }: Props) {
   const geo = boardGeometry(width, height);
   const { fp, innerW, innerH, pw, barW, barX, r, triLen, halfLen } = geo;
@@ -373,6 +377,13 @@ export function BoardSvg({
 
   return (
     <View style={{ width, height }} pointerEvents="none">
+      {background && (
+        <Image
+          source={background}
+          style={{ position: 'absolute', width, height }}
+          resizeMode="stretch"
+        />
+      )}
       <Svg width={width} height={height}>
         <Defs>
           <LinearGradient id="wood" x1="0" y1="0" x2="0" y2="1">
@@ -428,26 +439,31 @@ export function BoardSvg({
             <Stop offset="1" stopColor="#54403A" />
           </RadialGradient>
         </Defs>
-        <Rect x={0} y={0} width={width} height={height} rx={12} fill="url(#wood)" />
-        <Rect x={fp} y={fp} width={innerW} height={innerH} fill="url(#felt)" />
-        {grains}
-        <Rect
-          x={fp}
-          y={fp}
-          width={innerW}
-          height={innerH}
-          fill="none"
-          stroke="#00000055"
-          strokeWidth={3}
-        />
-        <Rect x={barX} y={fp} width={barW} height={innerH} fill="url(#barGrad)" />
-        {triangles}
+        {/* Vektörel tahta yalnızca tema görseli yoksa çizilir */}
+        {!background && (
+          <>
+            <Rect x={0} y={0} width={width} height={height} rx={12} fill="url(#wood)" />
+            <Rect x={fp} y={fp} width={innerW} height={innerH} fill="url(#felt)" />
+            {grains}
+            <Rect
+              x={fp}
+              y={fp}
+              width={innerW}
+              height={innerH}
+              fill="none"
+              stroke="#00000055"
+              strokeWidth={3}
+            />
+            <Rect x={barX} y={fp} width={barW} height={innerH} fill="url(#barGrad)" />
+            {triangles}
+            {hinges}
+            {labels}
+          </>
+        )}
         {destGlows}
         {checkers}
-        {hinges}
         {handStacks}
         {destDots}
-        {labels}
       </Svg>
     </View>
   );

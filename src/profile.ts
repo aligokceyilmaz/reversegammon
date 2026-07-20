@@ -15,6 +15,10 @@ export interface Profile {
   onlineGames: number;
   /** Online kazanılan oyun */
   onlineWins: number;
+  /** Seçili tahta teması (id) */
+  theme: string;
+  /** Pro üyelik (şimdilik test amaçlı yerel; mağazada satın almaya bağlanacak) */
+  isPro: boolean;
 }
 
 export const emptyProfile: Profile = {
@@ -24,6 +28,8 @@ export const emptyProfile: Profile = {
   aiWins: 0,
   onlineGames: 0,
   onlineWins: 0,
+  theme: 'classic',
+  isPro: false,
 };
 
 /** Seçilebilir avatarlar (üst sıra kadın, alt sıra erkek) */
@@ -61,6 +67,18 @@ export async function recordOnlineResult(won: boolean): Promise<void> {
   const p = await loadProfile();
   p.onlineGames += 1;
   if (won) p.onlineWins += 1;
+  await saveProfile(p);
+}
+
+export async function setTheme(theme: string): Promise<void> {
+  const p = await loadProfile();
+  p.theme = theme;
+  await saveProfile(p);
+}
+
+export async function setPro(isPro: boolean): Promise<void> {
+  const p = await loadProfile();
+  p.isPro = isPro;
   await saveProfile(p);
 }
 

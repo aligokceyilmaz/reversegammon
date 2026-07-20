@@ -15,10 +15,13 @@ import {
   loadProfile,
   onlineWinRate,
   saveProfile,
+  setPro,
+  setTheme,
   winRate,
 } from '../profile';
 import type { Profile } from '../profile';
 import { BoardSvg } from './BoardSvg';
+import { THEMES } from './themes';
 import { colors } from './theme';
 
 // ---------------------------------------------------------------------------
@@ -145,6 +148,7 @@ interface Props {
 export function MenuScreen({ onPlay }: Props) {
   const { width } = useWindowDimensions();
   const [showRules, setShowRules] = useState(false);
+  const [showThemes, setShowThemes] = useState(false);
   const [matchLen, setMatchLen] = useState(1);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [nameInput, setNameInput] = useState('');
@@ -158,6 +162,20 @@ export function MenuScreen({ onPlay }: Props) {
       setAvatarInput(p.avatar);
     });
   }, []);
+
+  async function chooseTheme(id: string) {
+    if (!profile) return;
+    const next = { ...profile, theme: id };
+    setProfile(next);
+    await setTheme(id);
+  }
+
+  async function togglePro() {
+    if (!profile) return;
+    const next = { ...profile, isPro: !profile.isPro };
+    setProfile(next);
+    await setPro(next.isPro);
+  }
 
   async function submitName() {
     const name = nameInput.trim().slice(0, 16);
@@ -272,11 +290,86 @@ export function MenuScreen({ onPlay }: Props) {
       <Pressable style={styles.primaryBtn} onPress={() => onPlay('pvp', matchLen)}>
         <Text style={styles.primaryBtnText}>👥 2 Kişi (aynı telefon)</Text>
       </Pressable>
-      <Pressable style={styles.ghostBtn} onPress={() => setShowRules(true)}>
-        <Text style={styles.ghostBtnText}>❓ Nasıl Oynanır?</Text>
-      </Pressable>
+      <View style={styles.bottomRow}>
+        <Pressable style={styles.ghostBtn} onPress={() => setShowThemes(true)}>
+          <Text style={styles.ghostBtnText}>🎨 Temalar</Text>
+        </Pressable>
+        <Pressable style={styles.ghostBtn} onPress={() => setShowRules(true)}>
+          <Text style={styles.ghostBtnText}>❓ Nasıl Oynanır?</Text>
+        </Pressable>
+      </View>
 
       {showRules && <HowToPlay onClose={() => setShowRules(false)} />}
+      {showThemes && profile && (
+        <ThemePicker
+          selected={profile.theme}
+          isPro={profile.isPro}
+          onSelect={chooseTheme}
+          onTogglePro={togglePro}
+          onClose={() => setShowThemes(false)}
+        />
+      )}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+function ThemePicker({
+  selected,
+  isPro,
+  onSelect,
+  onTogglePro,
+  onClose,
+}: {
+  selected: string;
+  isPro: boolean;
+  onSelect: (id: string) => void;
+  onTogglePro: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <View style={styles.howtoOverlay}>
+      <Text style={styles.howtoTitle}>🎨 Tahta Temaları</Text>
+      <Text style={styles.themeHint}>
+        Pro temalar üyelikle açılır. (Test için Pro'yu aç/kapa)
+      </Text>
+      <View style={styles.themeGrid}>
+        {THEMES.map((t) => {
+          const locked = t.pro && !isPro;
+          const isSel = t.id === selected;
+          return (
+            <Pressable
+              key={t.id}
+              style={[
+                styles.themeCard,
+                isSel && styles.themeCardSel,
+                locked && styles.themeCardLocked,
+              ]}
+              onPress={() => !locked && onSelect(t.id)}
+            >
+              {t.background ? (
+                <Image source={t.background} style={styles.themeThumb} resizeMode="cover" />
+              ) : (
+                <View style={[styles.themeThumb, styles.themeThumbClassic]} />
+              )}
+              <Text style={styles.themeName}>{t.name}</Text>
+              {t.pro && (
+                <Text style={styles.themeBadge}>{locked ? '🔒 PRO' : '⭐ PRO'}</Text>
+              )}
+              {isSel && <Text style={styles.themeSelMark}>✓</Text>}
+            </Pressable>
+          );
+        })}
+      </View>
+      <Pressable style={styles.proToggle} onPress={onTogglePro}>
+        <Text style={styles.proToggleText}>
+          {isPro ? '🟢 Pro: AÇIK (test)' : '⚪ Pro: kapalı — açmak için dokun (test)'}
+        </Text>
+      </Pressable>
+      <Pressable onPress={onClose} style={styles.howtoClose} hitSlop={10}>
+        <Text style={styles.howtoCloseText}>✕</Text>
+      </Pressable>
     </View>
   );
 }
@@ -422,12 +515,86 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 17,
   },
+  bottomRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
   ghostBtn: {
     borderRadius: 10,
     paddingVertical: 10,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     borderWidth: 1,
     borderColor: colors.textDim,
+  },
+  themeHint: {
+    color: colors.textDim,
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 6,
+    maxWidth: 340,
+  },
+  themeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 12,
+    maxWidth: 420,
+  },
+  themeCard: {
+    width: 92,
+    alignItems: 'center',
+    padding: 6,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    backgroundColor: colors.frame,
+  },
+  themeCardSel: {
+    borderColor: colors.accent,
+  },
+  themeCardLocked: {
+    opacity: 0.55,
+  },
+  themeThumb: {
+    width: 78,
+    height: 100,
+    borderRadius: 8,
+  },
+  themeThumbClassic: {
+    backgroundColor: '#C08A52',
+  },
+  themeName: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  themeBadge: {
+    color: colors.brass,
+    fontSize: 10,
+    fontWeight: '800',
+    marginTop: 1,
+  },
+  themeSelMark: {
+    position: 'absolute',
+    top: 4,
+    right: 8,
+    color: colors.accent,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  proToggle: {
+    marginTop: 14,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderWidth: 1,
+    borderColor: colors.brass,
+  },
+  proToggleText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '600',
   },
   ghostBtnText: {
     color: colors.text,

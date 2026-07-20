@@ -32,6 +32,7 @@ import {
 import type { Seat } from '../online/match';
 import { BoardSvg, boardGeometry } from './BoardSvg';
 import { Die } from './Dice';
+import { getTheme } from './themes';
 import { colors, PLAYER_NAMES } from './theme';
 
 type Phase = 'opening' | 'playing' | 'over';
@@ -114,6 +115,7 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
   /** Kullanıcı adı ve avatarı (Beyaz'ın etiketi için) */
   const [profileName, setProfileName] = useState('');
   const [profileAvatar, setProfileAvatar] = useState('');
+  const [themeId, setThemeId] = useState('classic');
   /** Tur süresi geri sayımı */
   const [timeLeft, setTimeLeft] = useState(TURN_SECONDS);
   /** Oyun duraklatıldı mı? (süre ve AI durur) */
@@ -123,6 +125,9 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
     loadProfile().then((p) => {
       setProfileName(p.name);
       setProfileAvatar(p.avatar);
+      // Pro değilse seçili tema kilitliyse klasiğe düş
+      const t = getTheme(p.theme);
+      setThemeId(t.pro && !p.isPro ? 'classic' : t.id);
     });
   }, []);
 
@@ -819,6 +824,7 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
                       ? false
                       : selected?.kind === 'hand'
                 }
+                background={getTheme(themeId).background}
               />
             </View>
           );
