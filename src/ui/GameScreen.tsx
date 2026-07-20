@@ -23,12 +23,25 @@ import {
 } from '../engine';
 import type { DestOption, GameState, MoveSource, Player } from '../engine';
 import { chooseMove } from '../engine/ai';
-import { loadProfile, recordAiResult } from '../profile';
+import { loadProfile, recordAiResult, recordOnlineResult } from '../profile';
+import {
+  abandonGame,
+  pushState,
+  subscribeGame,
+} from '../online/match';
+import type { Seat } from '../online/match';
 import { BoardSvg, boardGeometry } from './BoardSvg';
 import { Die } from './Dice';
 import { colors, PLAYER_NAMES } from './theme';
 
 type Phase = 'opening' | 'playing' | 'over';
+
+export interface OnlineCtx {
+  gameId: string;
+  seat: Player;
+  uid: string;
+  opponent: Seat;
+}
 
 interface Rect {
   x: number;
@@ -45,12 +58,14 @@ interface DragInfo {
   wasSelected: boolean;
 }
 
-export type GameMode = 'pvp' | 'ai';
+export type GameMode = 'pvp' | 'ai' | 'online';
 
 interface Props {
   mode: GameMode;
-  /** Seri uzunluğu: 1, 3 veya 5 oyun */
+  /** Seri uzunluğu: 1, 3 veya 5 oyun (online'da 1) */
   matchLen: number;
+  /** Online oyun bağlamı (sadece mode === 'online') */
+  online?: OnlineCtx;
   onExit: () => void;
 }
 
@@ -61,10 +76,16 @@ const EMPTY_POINTS: ReadonlySet<number> = new Set();
 const TURN_SECONDS =
   (globalThis as { __TURN_SECONDS__?: number }).__TURN_SECONDS__ ?? 30;
 
-export function GameScreen({ mode, matchLen, onExit }: Props) {
+export function GameScreen({ mode, matchLen, online, onExit }: Props) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const [phase, setPhase] = useState<Phase>('opening');
+  const isOnline = mode === 'online' && !!online;
+  const mySeat: Player = online?.seat ?? 0;
+  const [phase, setPhase] = useState<Phase>(isOnline ? 'playing' : 'opening');
+  const [opponentLeft, setOpponentLeft] = useState(false);
+  const [oppInfo, setOppInfo] = useState<Seat>(
+    online?.opponent ?? { uid: '', name: 'Rakip', avatar: '🙂' },
+  );
   const [opening, setOpening] = useState<{ w: number; b: number } | null>(null);
   const [game, setGame] = useState<GameState>(() => newGame());
   const [undoStack, setUndoStack] = useState<GameState[]>([]);
@@ -106,11 +127,35 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
   }, []);
 
   function nameFor(p: Player): string {
+    if (isOnline && online) {
+      const meName = profileName || 'Sen';
+      const opName = oppInfo.name || 'Rakip';
+      if (p === mySeat) return `${profileAvatar || ''} ${meName} (Sen)`.trim();
+      return `${oppInfo.avatar || ''} ${opName}`.trim();
+    }
     if (p === 0) {
       const av = profileAvatar ? `${profileAvatar} ` : '';
       return profileName ? `${av}Beyaz (${profileName})` : `${av}Beyaz`;
     }
     return mode === 'ai' ? 'Siyah (Bilgisayar)' : 'Siyah';
+  }
+
+  /** Skorboard için koltuk bilgisi (kısa) */
+  function seatInfo(p: Player): { avatar: string; name: string } {
+    if (isOnline && online) {
+      if (p === mySeat)
+        return { avatar: profileAvatar || '⚪', name: `${profileName || 'Sen'} (Sen)` };
+      return {
+        avatar: oppInfo.avatar || '⚫',
+        name: oppInfo.name || 'Rakip',
+      };
+    }
+    if (p === 0)
+      return { avatar: profileAvatar || '⚪', name: profileName || 'Beyaz' };
+    return {
+      avatar: mode === 'ai' ? '🤖' : '⚫',
+      name: mode === 'ai' ? 'Bilgisayar' : 'Siyah',
+    };
   }
 
   // --- Boyutlar (çentik/safe-area dahil, küçük ekranlara sığacak şekilde) ---
@@ -172,6 +217,12 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
     game.turn === AI_PLAYER &&
     game.winner === null;
 
+  // Online'da rakibin turu: tahta salt-okunur, hamleler snapshot ile gelir
+  const opponentTurn =
+    isOnline && phase === 'playing' && game.turn !== mySeat && game.winner === null;
+  // Girişin kilitli olduğu her durum (AI ya da online rakip sırası)
+  const inputLocked = aiTurn || opponentTurn;
+
   // PanResponder'lar bir kez kurulur; güncel duruma ref üzerinden erişirler
   const ui = useRef({
     phase,
@@ -184,6 +235,7 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
     handIsSource,
     geo,
     aiTurn,
+    inputLocked,
     paused,
   });
   ui.current = {
@@ -197,6 +249,7 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
     handIsSource,
     geo,
     aiTurn,
+    inputLocked,
     paused,
   };
 
@@ -210,12 +263,22 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
   const offRects = useRef<[Rect | null, Rect | null]>([null, null]);
   const dragRef = useRef<DragInfo | null>(null);
 
+  /** Durumu uygula; online ise Firestore'a da yaz */
+  function commit(next: GameState) {
+    setGame(next);
+    if (isOnline && online) {
+      pushState(online.gameId, online.uid, next).catch(() => {});
+    }
+  }
+  const commitRef = useRef(commit);
+  commitRef.current = commit;
+
   /** Bir hedef seçeneğini (tek hamle ya da kombine dizi) tek geri-alma adımı olarak uygula */
   function doApplyOption(option: DestOption) {
-    setUndoStack((s) => [...s, ui.current.game]);
+    setUndoStack((s) => (isOnline ? s : [...s, ui.current.game]));
     let next = ui.current.game;
     for (const m of option.moves) next = applyMove(next, m);
-    setGame(next);
+    commit(next);
     // Elden art arda yerleştirme akıcı olsun: el hâlâ kaynaksa seçili kalsın
     if (
       option.moves[0].type === 'place' &&
@@ -291,7 +354,7 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
         return (
           u.phase === 'playing' &&
           u.game.rolled !== null &&
-          !u.aiTurn &&
+          !u.inputLocked &&
           !u.paused
         );
       },
@@ -385,15 +448,17 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
       setPhase('over');
       return;
     }
+    // Online'da yalnızca kendi turumu sonlandırırım; rakibinki snapshot ile gelir
+    if (opponentTurn) return;
     if (game.rolled && game.dice.length === 0 && !paused) {
       const t = setTimeout(() => {
-        setGame(endTurn(game));
+        commit(endTurn(ui.current.game));
         setUndoStack([]);
         setSelected(null);
       }, 650);
       return () => clearTimeout(t);
     }
-  }, [game, phase, paused]);
+  }, [game, phase, paused, opponentTurn]);
 
   // Tek kaynak varsa otomatik seç (örn. ilk turlarda sadece "el" oynanabilir)
   useEffect(() => {
@@ -402,11 +467,42 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
       game.rolled &&
       !selected &&
       sources.length === 1 &&
-      !aiTurn
+      !inputLocked
     ) {
       setSelected(sources[0]);
     }
-  }, [game, phase, selected, sources, aiTurn]);
+  }, [game, phase, selected, sources, inputLocked]);
+
+  // Online: Firestore snapshot'larını dinle; rakip hamlesi/ayrılması geldiğinde uygula
+  useEffect(() => {
+    if (!isOnline || !online) return;
+    let lastRolled: string | null = null;
+    const unsub = subscribeGame(online.gameId, (remote, docData) => {
+      // Rakip bilgisini canlı güncelle
+      const opp = docData.seats[String(1 - mySeat)];
+      if (opp && opp.name) setOppInfo(opp);
+      if (docData.status === 'abandoned' && docData.updatedBy !== online.uid) {
+        setOpponentLeft(true);
+        return;
+      }
+      // Yalnızca rakibin yazdığı güncellemeleri uygula (kendi yazdığımı değil)
+      if (docData.updatedBy === online.uid) return;
+      setGame(remote);
+      setUndoStack([]);
+      setSelected(null);
+      // Rakip zar attıysa popup göster
+      const rk = remote.rolled ? remote.rolled.join(',') : null;
+      if (rk && rk !== lastRolled && remote.dice.length > 0) {
+        setRollPopup({
+          dice: remote.rolled!,
+          player: remote.turn,
+          key: Date.now(),
+        });
+      }
+      lastRolled = rk;
+    });
+    return unsub;
+  }, [isOnline, online]);
 
   // AI (Bilgisayar) turu: zar at → hamleyi önce vurgula, sonra oyna
   // (hamle yoksa aşağıdaki otomatik pas akışı devreye girer)
@@ -453,6 +549,7 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
     if (
       phase !== 'playing' ||
       paused ||
+      opponentTurn ||
       game.winner !== null ||
       game.rolled === null ||
       game.dice.length === 0 ||
@@ -464,7 +561,7 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
     setNoMovePopup(partial ? 'Kalan zar oynanamıyor' : 'Hamle yapılamıyor');
     const t = setTimeout(() => {
       setNoMovePopup(null);
-      setGame(endTurn(ui.current.game));
+      commit(endTurn(ui.current.game));
       setUndoStack([]);
       setSelected(null);
     }, 1700);
@@ -472,7 +569,7 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
       clearTimeout(t);
       setNoMovePopup(null);
     };
-  }, [phase, game, legal, paused]);
+  }, [phase, game, legal, paused, opponentTurn]);
 
   // Zar popup'ı kısa süre sonra kaybolsun
   useEffect(() => {
@@ -481,13 +578,14 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
     return () => clearTimeout(t);
   }, [rollPopup]);
 
-  // AI moduna karşı biten oyunu istatistiklere işle (bir kez)
+  // Biten oyunu istatistiklere işle (bir kez): AI ya da online
   useEffect(() => {
-    if (phase === 'over' && mode === 'ai' && game.winner !== null && !recordedRef.current) {
+    if (phase === 'over' && game.winner !== null && !recordedRef.current) {
       recordedRef.current = true;
-      recordAiResult(game.winner === 0);
+      if (mode === 'ai') recordAiResult(game.winner === 0);
+      else if (isOnline) recordOnlineResult(game.winner === mySeat);
     }
-  }, [phase, mode, game.winner]);
+  }, [phase, mode, game.winner, isOnline, mySeat]);
 
   // Biten oyunu seri skoruna işle (bir kez)
   useEffect(() => {
@@ -506,12 +604,13 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
     if (g.rolled && g.dice.length > 0 && legalMoves(g).length === 0) return;
     dragRef.current = null;
     setDragPos(null);
-    setGame(endTurn(g));
+    commitRef.current(endTurn(g));
     setUndoStack([]);
     setSelected(null);
   };
   useEffect(() => {
-    if (phase !== 'playing' || aiTurn || paused || game.winner !== null) return;
+    if (phase !== 'playing' || inputLocked || paused || game.winner !== null)
+      return;
     setTimeLeft(TURN_SECONDS);
     const started = Date.now();
     const iv = setInterval(() => {
@@ -529,7 +628,7 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
   function doRoll() {
     const d1 = randomDie();
     const d2 = randomDie();
-    setGame(rollDice(game, d1, d2));
+    commit(rollDice(game, d1, d2));
     setRollPopup({ dice: [d1, d2], player: game.turn, key: Date.now() });
     setUndoStack([]);
     setSelected(null);
@@ -578,6 +677,12 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
   // Sürüklenen pul parmağın altında kalmasın diye biraz daha büyük
   const dragR = Math.max(geo.r * 1.15, 20);
 
+  /** Menüye dönerken online oyunu terk et */
+  function exitGame() {
+    if (isOnline && online) abandonGame(online.gameId, online.uid).catch(() => {});
+    onExit();
+  }
+
   return (
     <View
       style={[
@@ -591,11 +696,11 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
       ]}
     >
       <View style={[styles.banner, { height: bannerH }]}>
-        <Pressable onPress={onExit} hitSlop={8} style={styles.iconBtn}>
+        <Pressable onPress={exitGame} hitSlop={8} style={styles.iconBtn}>
           <Text style={styles.iconBtnText}>☰</Text>
         </Pressable>
 
-        {/* Skorboard: sol Beyaz (sen), ortada skor, sağ rakip */}
+        {/* Skorboard: sol koltuk 0, ortada skor, sağ koltuk 1 */}
         <View style={styles.scoreboard}>
           <View
             style={[
@@ -603,9 +708,9 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
               phase === 'playing' && game.turn === 0 && styles.sbSideActive,
             ]}
           >
-            <Text style={styles.sbAvatar}>{profileAvatar || '⚪'}</Text>
+            <Text style={styles.sbAvatar}>{seatInfo(0).avatar}</Text>
             <Text style={styles.sbName} numberOfLines={1}>
-              {profileName || 'Beyaz'}
+              {seatInfo(0).name}
             </Text>
             {phase === 'playing' && game.turn === 0 && !aiTurn && (
               <Text
@@ -631,9 +736,9 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
               phase === 'playing' && game.turn === 1 && styles.sbSideActive,
             ]}
           >
-            <Text style={styles.sbAvatar}>{mode === 'ai' ? '🤖' : '⚫'}</Text>
+            <Text style={styles.sbAvatar}>{seatInfo(1).avatar}</Text>
             <Text style={styles.sbName} numberOfLines={1}>
-              {mode === 'ai' ? 'Bilgisayar' : 'Siyah'}
+              {seatInfo(1).name}
             </Text>
             {phase === 'playing' && game.turn === 1 && !aiTurn && (
               <Text
@@ -685,26 +790,34 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
                 state={game}
                 width={boardW}
                 height={boardH}
-                sourcePoints={aiTurn ? EMPTY_POINTS : sourcePointSet}
+                sourcePoints={inputLocked ? EMPTY_POINTS : sourcePointSet}
                 selectedPoint={
                   aiTurn
                     ? aiPreview?.src.kind === 'point'
                       ? aiPreview.src.point!
                       : null
-                    : selected?.kind === 'point'
-                      ? selected.point!
-                      : null
+                    : inputLocked
+                      ? null
+                      : selected?.kind === 'point'
+                        ? selected.point!
+                        : null
                 }
                 destPoints={
                   aiTurn
                     ? aiPreview && aiPreview.dest !== 'off'
                       ? new Set([aiPreview.dest])
                       : EMPTY_POINTS
-                    : destPointSet
+                    : inputLocked
+                      ? EMPTY_POINTS
+                      : destPointSet
                 }
-                handIsSource={aiTurn ? false : handIsSource}
+                handIsSource={inputLocked ? false : handIsSource}
                 handSelected={
-                  aiTurn ? aiPreview?.src.kind === 'hand' : selected?.kind === 'hand'
+                  aiTurn
+                    ? aiPreview?.src.kind === 'hand'
+                    : inputLocked
+                      ? false
+                      : selected?.kind === 'hand'
                 }
               />
             </View>
@@ -737,13 +850,22 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
         />
       )}
 
-      {/* Merkezde Zar At butonu (insan turu, zar atılmadan önce; süre işler) */}
-      {phase === 'playing' && game.rolled === null && !aiTurn && (
+      {/* Merkezde Zar At butonu (kendi turum, zar atılmadan önce; süre işler) */}
+      {phase === 'playing' && game.rolled === null && !inputLocked && (
         <View style={styles.rollOverlay} pointerEvents="box-none">
           <Pressable style={styles.centerRollBtn} onPress={doRoll}>
             <Text style={styles.centerRollText}>🎲 Zar At</Text>
             <Text style={styles.centerRollTimer}>⏱ {timeLeft} sn</Text>
           </Pressable>
+        </View>
+      )}
+
+      {/* Online: rakip oynuyor göstergesi */}
+      {opponentTurn && (
+        <View style={styles.rollOverlay} pointerEvents="none">
+          <View style={styles.waitBox}>
+            <Text style={styles.waitText}>⏳ Rakip oynuyor…</Text>
+          </View>
         </View>
       )}
 
@@ -758,7 +880,7 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
       )}
 
       {/* Son 5 saniye geri sayımı */}
-      {phase === 'playing' && !aiTurn && game.winner === null && timeLeft <= 5 && timeLeft > 0 && (
+      {phase === 'playing' && !inputLocked && game.winner === null && timeLeft <= 5 && timeLeft > 0 && (
         <View style={styles.rollOverlay} pointerEvents="none">
           <View style={styles.countBox}>
             <Text style={styles.countText}>{timeLeft}</Text>
@@ -787,7 +909,7 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
             >
               <Text style={styles.primaryBtnText}>▶ Devam Et</Text>
             </Pressable>
-            <Pressable style={styles.ghostBtn} onPress={onExit}>
+            <Pressable style={styles.ghostBtn} onPress={exitGame}>
               <Text style={styles.ghostBtnText}>Menüye Dön</Text>
             </Pressable>
           </View>
@@ -806,31 +928,65 @@ export function GameScreen({ mode, matchLen, onExit }: Props) {
         />
       )}
 
+      {/* Rakip oyundan ayrıldı */}
+      {opponentLeft && phase !== 'over' && (
+        <View style={styles.overlay}>
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>👋 Rakip ayrıldı</Text>
+            <Text style={styles.modalSub}>Oyun sonlandı.</Text>
+            <Pressable style={styles.primaryBtn} onPress={onExit}>
+              <Text style={styles.primaryBtnText}>Menüye Dön</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
       {phase === 'over' && game.winner !== null && (
         <View style={styles.overlay}>
           <View style={styles.modal}>
-            <Text style={styles.modalTitle}>
-              🏆 {nameFor(game.winner)} {matchOver && matchLen > 1 ? 'seriyi kazandı!' : 'kazandı!'}
-            </Text>
-            <Text style={styles.modalSub}>
-              {matchLen > 1
-                ? `Seri durumu: ${series[0]} – ${series[1]} (${matchLen} oyunluk seri)`
-                : '15 pulunu ilk toplayan oldu.'}
-            </Text>
-            {matchOver ? (
-              <Pressable style={styles.primaryBtn} onPress={newSeries}>
-                <Text style={styles.primaryBtnText}>Yeni Seri</Text>
-              </Pressable>
-            ) : (
-              <Pressable style={styles.primaryBtn} onPress={nextGame}>
-                <Text style={styles.primaryBtnText}>
-                  {matchLen > 1 ? `Sonraki Oyun (${gameNo + 1}/${matchLen})` : 'Yeni Oyun'}
+            {isOnline ? (
+              <>
+                <Text style={styles.modalTitle}>
+                  {game.winner === mySeat ? '🏆 Kazandın!' : '😔 Kaybettin'}
                 </Text>
-              </Pressable>
+                <Text style={styles.modalSub}>
+                  {game.winner === mySeat
+                    ? '15 pulunu ilk sen topladın.'
+                    : 'Rakip 15 pulunu önce topladı.'}
+                </Text>
+                <Pressable style={styles.primaryBtn} onPress={onExit}>
+                  <Text style={styles.primaryBtnText}>Menüye Dön</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Text style={styles.modalTitle}>
+                  🏆 {nameFor(game.winner)}{' '}
+                  {matchOver && matchLen > 1 ? 'seriyi kazandı!' : 'kazandı!'}
+                </Text>
+                <Text style={styles.modalSub}>
+                  {matchLen > 1
+                    ? `Seri durumu: ${series[0]} – ${series[1]} (${matchLen} oyunluk seri)`
+                    : '15 pulunu ilk toplayan oldu.'}
+                </Text>
+                {matchOver ? (
+                  <Pressable style={styles.primaryBtn} onPress={newSeries}>
+                    <Text style={styles.primaryBtnText}>Yeni Seri</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable style={styles.primaryBtn} onPress={nextGame}>
+                    <Text style={styles.primaryBtnText}>
+                      {matchLen > 1
+                        ? `Sonraki Oyun (${gameNo + 1}/${matchLen})`
+                        : 'Yeni Oyun'}
+                    </Text>
+                  </Pressable>
+                )}
+                <Pressable style={styles.ghostBtn} onPress={exitGame}>
+                  <Text style={styles.ghostBtnText}>Menüye Dön</Text>
+                </Pressable>
+              </>
             )}
-            <Pressable style={styles.ghostBtn} onPress={onExit}>
-              <Text style={styles.ghostBtnText}>Menüye Dön</Text>
-            </Pressable>
           </View>
         </View>
       )}
@@ -1248,6 +1404,19 @@ const styles = StyleSheet.create({
   noMoveSub: {
     color: colors.textDim,
     fontSize: 12,
+  },
+  waitBox: {
+    backgroundColor: '#241812CC',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderWidth: 1,
+    borderColor: colors.brass,
+  },
+  waitText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '700',
   },
   countBox: {
     backgroundColor: '#241812EE',

@@ -10,7 +10,13 @@ import {
 } from 'react-native';
 import { newGame, TOTAL_CHECKERS } from '../engine';
 import type { GameState, Player } from '../engine';
-import { AVATARS, loadProfile, saveProfile, winRate } from '../profile';
+import {
+  AVATARS,
+  loadProfile,
+  onlineWinRate,
+  saveProfile,
+  winRate,
+} from '../profile';
 import type { Profile } from '../profile';
 import { BoardSvg } from './BoardSvg';
 import { colors } from './theme';
@@ -133,7 +139,7 @@ function HowToPlay({ onClose }: { onClose: () => void }) {
 // ---------------------------------------------------------------------------
 
 interface Props {
-  onPlay: (mode: 'pvp' | 'ai', matchLen: number) => void;
+  onPlay: (mode: 'pvp' | 'ai' | 'online', matchLen: number) => void;
 }
 
 export function MenuScreen({ onPlay }: Props) {
@@ -223,8 +229,12 @@ export function MenuScreen({ onPlay }: Props) {
               </Pressable>
             </View>
             <Text style={styles.profileStats}>
-              🤖 Bilgisayara karşı: {profile.aiGames} oyun · {profile.aiWins}{' '}
-              galibiyet · %{winRate(profile)} başarı
+              🤖 Bilgisayar: {profile.aiGames} oyun · {profile.aiWins} galibiyet
+              · %{winRate(profile)}
+            </Text>
+            <Text style={styles.profileStats}>
+              🌍 Online: {profile.onlineGames} oyun · {profile.onlineWins}{' '}
+              galibiyet · %{onlineWinRate(profile)}
             </Text>
           </View>
         ))}
@@ -250,6 +260,12 @@ export function MenuScreen({ onPlay }: Props) {
         ))}
       </View>
 
+      <Pressable
+        style={[styles.primaryBtn, styles.onlineBtn]}
+        onPress={() => onPlay('online', 1)}
+      >
+        <Text style={styles.primaryBtnText}>🌍 Online Oyna</Text>
+      </Pressable>
       <Pressable style={styles.primaryBtn} onPress={() => onPlay('ai', matchLen)}>
         <Text style={styles.primaryBtnText}>🤖 Tek Kişilik</Text>
       </Pressable>
@@ -395,6 +411,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 36,
     minWidth: 260,
     alignItems: 'center',
+  },
+  onlineBtn: {
+    backgroundColor: colors.brass,
+    borderWidth: 2,
+    borderColor: '#FFE9A6',
   },
   primaryBtnText: {
     color: '#33200F',

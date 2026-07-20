@@ -11,6 +11,10 @@ export interface Profile {
   aiGames: number;
   /** Bilgisayara karşı kazanılan oyun */
   aiWins: number;
+  /** Online oynanan toplam oyun */
+  onlineGames: number;
+  /** Online kazanılan oyun */
+  onlineWins: number;
 }
 
 export const emptyProfile: Profile = {
@@ -18,6 +22,8 @@ export const emptyProfile: Profile = {
   avatar: '',
   aiGames: 0,
   aiWins: 0,
+  onlineGames: 0,
+  onlineWins: 0,
 };
 
 /** Seçilebilir avatarlar (üst sıra kadın, alt sıra erkek) */
@@ -50,6 +56,20 @@ export async function recordAiResult(won: boolean): Promise<void> {
   await saveProfile(p);
 }
 
+/** Online biten bir oyunun sonucunu işler */
+export async function recordOnlineResult(won: boolean): Promise<void> {
+  const p = await loadProfile();
+  p.onlineGames += 1;
+  if (won) p.onlineWins += 1;
+  await saveProfile(p);
+}
+
 export function winRate(p: Profile): number {
   return p.aiGames === 0 ? 0 : Math.round((p.aiWins / p.aiGames) * 100);
+}
+
+export function onlineWinRate(p: Profile): number {
+  return p.onlineGames === 0
+    ? 0
+    : Math.round((p.onlineWins / p.onlineGames) * 100);
 }
