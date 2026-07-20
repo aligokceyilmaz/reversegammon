@@ -35,8 +35,11 @@ export function OnlineLobby({ onMatched, onCancel }: Props) {
         if (cancel.cancelled || !result) return;
         // Rakibin gerçek adı/avatarı ilk snapshot'ta GameScreen'de güncellenir.
         onMatched(result, { uid: '', name: 'Rakip', avatar: '🙂' }, uid);
-      } catch (e) {
-        setStatus('Bağlantı hatası. İnternet ve Firebase ayarlarını kontrol et.');
+      } catch (e: unknown) {
+        const err = e as { code?: string; message?: string };
+        setStatus(
+          `Hata: ${err.code || ''} ${err.message || String(e)}`.trim(),
+        );
       }
     })();
     return () => {
