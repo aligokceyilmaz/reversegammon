@@ -12,6 +12,12 @@ export interface BoardTheme {
 export const THEMES: BoardTheme[] = [
   { id: 'classic', name: 'Klasik Ahşap', pro: false, background: null },
   {
+    id: 'neon',
+    name: 'Neon',
+    pro: true,
+    background: require('../../assets/themes/neon.png'),
+  },
+  {
     id: 'emerald',
     name: 'Zümrüt',
     pro: true,
