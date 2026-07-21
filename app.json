@@ -30,6 +30,17 @@
       "resizeMode": "contain",
       "backgroundColor": "#1C120A"
     },
-    "extra": {}
+    "extra": {
+      "eas": {
+        "projectId": "8d7009b7-e259-454b-947d-cdd85358f041"
+      }
+    },
+    "owner": "aligokceyilmaz",
+    "updates": {
+      "url": "https://u.expo.dev/8d7009b7-e259-454b-947d-cdd85358f041"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    }
   }
 }
