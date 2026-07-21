@@ -29,6 +29,20 @@ export const THEMES: BoardTheme[] = [
     },
   },
   {
+    id: 'obsidian',
+    name: 'Obsidyen',
+    pro: true,
+    background: require('../../assets/themes/obsidian.png'),
+    layout: {
+      left: 0.068,
+      right: 0.932,
+      top: 0.05,
+      bottom: 0.94,
+      barLeft: 0.452,
+      barRight: 0.548,
+    },
+  },
+  {
     id: 'emerald',
     name: 'Zümrüt',
     pro: true,
