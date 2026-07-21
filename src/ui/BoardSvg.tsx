@@ -30,33 +30,74 @@ interface Props {
   handSelected: boolean;
   /** Tema arka plan görseli; verilirse vektörel tahta çizilmez */
   background?: ImageSourcePropType | null;
+  /** Tema kalibrasyonu (özel görsellerde nokta/pul hizası için) */
+  layout?: BoardLayout;
+  /** Kalibrasyon modu: tüm hanelere harf etiketi çizer */
+  calibrate?: boolean;
 }
 
 /**
- * Tahta geometrisi — klasik tavla duruşu her zaman korunur: üçgenler üst ve
- * alt kenardan içeri bakar, bar dikey ortadadır. Dikey ekranda tahta uzar,
- * hane genişliği ekrana göre ölçeklenir (klasik mobil tavla görünümü).
- * Alt sıra 0-11 (sağdan sola, Beyaz girişi sağ-alt), üst sıra 12-23
- * (soldan sağa, Siyah girişi sağ-üst). Oyuna girmemiş pullar barın
- * üzerinde bekler: Beyaz'ınki alt yarıda, Siyah'ınki üst yarıda.
+ * Tema kalibrasyonu: oyun alanı dikdörtgeni ve bar konumu, tahta genişlik/
+ * yüksekliğinin oranı (0..1) olarak. Özel tema görsellerinde üçgenlerin
+ * konumu farklı olabildiği için nokta/pul yerleşimi bu değerlerle hizalanır.
+ * Verilmezse klasik (ince çerçeve, 13 eşit sütun) düzen kullanılır.
  */
-export function boardGeometry(width: number, height: number) {
-  const fp = 10; // çerçeve kalınlığı
+export interface BoardLayout {
+  left: number; // oyun alanı sol kenarı
+  right: number; // oyun alanı sağ kenarı
+  top: number; // üst sıra üçgen tabanı (y)
+  bottom: number; // alt sıra üçgen tabanı (y)
+  barLeft: number; // orta bar sol kenarı
+  barRight: number; // orta bar sağ kenarı
+}
+
+/**
+ * Tahta geometrisi — klasik tavla duruşu: üçgenler üst/alt kenardan içeri
+ * bakar, bar dikey ortadadır. Alt sıra 0-11, üst sıra 12-23. `layout` verilirse
+ * (özel tema) tüm konumlar o oranlardan hesaplanır.
+ */
+export function boardGeometry(
+  width: number,
+  height: number,
+  layout?: BoardLayout,
+) {
+  const fp = 10; // klasik çerçeve kalınlığı
   const innerW = width - fp * 2;
   const innerH = height - fp * 2;
-  const pw = innerW / 13; // 12 hane + bar
-  const barW = pw;
-  // Pul yarıçapı: parmakla rahat tutulsun diye hane genişliğinden biraz taşar
-  // (gerçek tavla uygulamalarındaki gibi); dokunma alanı zaten tüm sütundur
+  const pwDef = innerW / 13;
+  const L: BoardLayout = layout ?? {
+    left: fp / width,
+    right: (width - fp) / width,
+    top: fp / height,
+    bottom: (height - fp) / height,
+    barLeft: (fp + 6 * pwDef) / width,
+    barRight: (fp + 7 * pwDef) / width,
+  };
+
+  const fieldL = L.left * width;
+  const fieldR = L.right * width;
+  const fieldT = L.top * height;
+  const fieldB = L.bottom * height;
+  const barL = L.barLeft * width;
+  const barR = L.barRight * width;
+  const colWL = (barL - fieldL) / 6; // sol yarı sütun genişliği
+  const colWR = (fieldR - barR) / 6; // sağ yarı sütun genişliği
+  const pw = Math.min(colWL, colWR);
+  const barW = barR - barL;
+  const barX = barL;
+  const barC = (barL + barR) / 2;
+  const midY = (fieldT + fieldB) / 2;
   const r = Math.min(pw * 0.58, 34);
-  const triLen = innerH * 0.4;
-  const halfLen = innerH / 2 - 4;
-  const barX = fp + 6 * pw; // barın sol kenarı
+  const triLen = (fieldB - fieldT) * 0.4;
+  const halfLen = (fieldB - fieldT) / 2 - 4;
 
-  /** Şeridin (sütunun) x merkezi (bar atlanır) */
-  const laneC = (lane: number) => fp + lane * pw + (lane >= 6 ? barW : 0) + pw / 2;
+  /** Şeridin (sütunun) x merkezi */
+  const laneC = (lane: number) =>
+    lane < 6
+      ? fieldL + (lane + 0.5) * colWL
+      : barR + (lane - 6 + 0.5) * colWR;
 
-  /** Hane → kenar noktası ve içe doğru birim yön */
+  /** Hane → taban noktası ve içe doğru birim yön */
   function pointGeom(i: number): {
     bx: number;
     by: number;
@@ -68,7 +109,7 @@ export function boardGeometry(width: number, height: number) {
     const lane = bottom ? 11 - i : i - 12;
     return {
       bx: laneC(lane),
-      by: bottom ? height - fp : fp,
+      by: bottom ? fieldB : fieldT,
       dx: 0,
       dy: bottom ? -1 : 1,
       lane,
@@ -77,21 +118,20 @@ export function boardGeometry(width: number, height: number) {
 
   /** Tahta-yerel koordinat → hane indeksi (bar/dışarısı: null) */
   function pointAt(x: number, y: number): number | null {
-    if (x < fp || x > width - fp || y < fp || y > height - fp) return null;
-    const along = x - fp;
+    if (x < fieldL || x > fieldR || y < 0 || y > height) return null;
     let lane: number;
-    if (along < 6 * pw) lane = Math.floor(along / pw);
-    else if (along < 6 * pw + barW) return null; // orta bar
-    else lane = 6 + Math.floor((along - 6 * pw - barW) / pw);
+    if (x < barL) lane = Math.floor((x - fieldL) / colWL);
+    else if (x <= barR) return null; // orta bar
+    else lane = 6 + Math.floor((x - barR) / colWR);
     if (lane < 0 || lane > 11) return null;
-    return y < height / 2 ? 12 + lane : 11 - lane;
+    return y < midY ? 12 + lane : 11 - lane;
   }
 
   /** Barın üzerindeki el destesi bölgesi: hangi oyuncunun? (değilse null) */
   function barZoneAt(x: number, y: number): Player | null {
-    if (x < barX - pw * 0.2 || x > barX + barW + pw * 0.2) return null;
-    if (y < fp || y > height - fp) return null;
-    return y >= height / 2 ? 0 : 1;
+    if (x < barL - colWL * 0.3 || x > barR + colWR * 0.3) return null;
+    if (y < 0 || y > height) return null;
+    return y >= midY ? 0 : 1;
   }
 
   return {
@@ -101,6 +141,10 @@ export function boardGeometry(width: number, height: number) {
     pw,
     barW,
     barX,
+    barC,
+    fieldT,
+    fieldB,
+    midY,
     r,
     triLen,
     halfLen,
@@ -186,9 +230,12 @@ export function BoardSvg({
   handIsSource,
   handSelected,
   background,
+  layout,
+  calibrate,
 }: Props) {
-  const geo = boardGeometry(width, height);
-  const { fp, innerW, innerH, pw, barW, barX, r, triLen, halfLen } = geo;
+  const geo = boardGeometry(width, height, layout);
+  const { fp, innerW, innerH, pw, barW, barX, barC, fieldT, fieldB, midY, r, triLen, halfLen } =
+    geo;
 
   const triangles: React.ReactNode[] = [];
   const checkers: React.ReactNode[] = [];
@@ -263,16 +310,15 @@ export function BoardSvg({
 
   // Bar üzerindeki desteler: oyun başında eldeki pullar, toplama başlayınca
   // toplanan pullar aynı hazneye geri dolar. Beyaz alt yarıda, Siyah üstte.
-  const barC = barX + barW / 2;
   const rb = Math.min(barW * 0.54, r); // deste pulları da parmağa uygun boyda
   const handStacks: React.ReactNode[] = [];
   for (const p of [0, 1] as const) {
     const count = state.hand[p] > 0 ? state.hand[p] : state.borneOff[p];
     const isHand = state.hand[p] > 0;
     if (count === 0) continue;
-    const avail = innerH / 2 - 26;
+    const avail = (fieldB - fieldT) / 2 - 26;
     const step = count <= 1 ? 0 : Math.min(rb * 0.6, (avail - 2 * rb) / (count - 1));
-    const startY = p === 0 ? height - fp - rb - 4 : fp + rb + 4;
+    const startY = p === 0 ? fieldB - rb - 4 : fieldT + rb + 4;
     const dirY = p === 0 ? -1 : 1;
     const isTurn = state.turn === p;
     for (let k = 0; k < count; k++) {
@@ -306,7 +352,7 @@ export function BoardSvg({
       <SvgText
         key={`hc${p}`}
         x={barC}
-        y={p === 0 ? height / 2 + 18 : height / 2 - 12}
+        y={p === 0 ? midY + 18 : midY - 12}
         fontSize={10}
         fontWeight="bold"
         fill={colors.text}
@@ -465,6 +511,46 @@ export function BoardSvg({
         {checkers}
         {handStacks}
         {destDots}
+        {calibrate && (
+          <>
+            {/* Oyun alanı ve bar sınırları */}
+            <Rect
+              x={geo.fieldT * 0 + (layout ? layout.left * width : fp)}
+              y={fieldT}
+              width={
+                (layout ? layout.right * width : width - fp) -
+                (layout ? layout.left * width : fp)
+              }
+              height={fieldB - fieldT}
+              fill="none"
+              stroke="#FF00FF"
+              strokeWidth={2}
+            />
+            <Rect
+              x={barX}
+              y={fieldT}
+              width={barW}
+              height={fieldB - fieldT}
+              fill="#FF00FF"
+              opacity={0.25}
+            />
+            {Array.from({ length: 12 }, (_, lane) => {
+              const cx = geo.laneC(lane);
+              const letter = String.fromCharCode(65 + lane); // A..L
+              return (
+                <React.Fragment key={`cal${lane}`}>
+                  <Rect x={cx - 0.7} y={fieldT} width={1.4} height={fieldB - fieldT} fill="#00E5FF" opacity={0.7} />
+                  <SvgText x={cx} y={fieldT + 12} fontSize={12} fontWeight="bold" fill="#00E5FF" textAnchor="middle">
+                    {letter}
+                  </SvgText>
+                  <SvgText x={cx} y={fieldB - 4} fontSize={12} fontWeight="bold" fill="#00E5FF" textAnchor="middle">
+                    {letter}
+                  </SvgText>
+                </React.Fragment>
+              );
+            })}
+          </>
+        )}
       </Svg>
     </View>
   );

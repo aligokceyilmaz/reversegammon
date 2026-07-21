@@ -1,4 +1,5 @@
 import type { ImageSourcePropType } from 'react-native';
+import type { BoardLayout } from './BoardSvg';
 
 export interface BoardTheme {
   id: string;
@@ -7,6 +8,8 @@ export interface BoardTheme {
   pro: boolean;
   /** Tahta arka plan görseli; null ise vektörel klasik tahta çizilir */
   background: ImageSourcePropType | null;
+  /** Özel görselde nokta/pul hizası için kalibrasyon (yoksa klasik düzen) */
+  layout?: BoardLayout;
 }
 
 export const THEMES: BoardTheme[] = [
@@ -16,6 +19,14 @@ export const THEMES: BoardTheme[] = [
     name: 'Neon',
     pro: true,
     background: require('../../assets/themes/neon.png'),
+    layout: {
+      left: 0.068,
+      right: 0.932,
+      top: 0.05,
+      bottom: 0.94,
+      barLeft: 0.452,
+      barRight: 0.548,
+    },
   },
   {
     id: 'emerald',

@@ -181,7 +181,8 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
   const boardH = portrait
     ? height - padT - padB - bannerH - panelH * 2 - gap * 2
     : height - padT - padB - bannerH - gap;
-  const geo = boardGeometry(boardW, boardH);
+  const themeLayout = getTheme(themeId).layout;
+  const geo = boardGeometry(boardW, boardH, themeLayout);
 
   const legal = useMemo(
     () => (phase === 'playing' && game.rolled ? legalMoves(game) : []),
@@ -825,6 +826,7 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
                       : selected?.kind === 'hand'
                 }
                 background={getTheme(themeId).background}
+                layout={themeLayout}
               />
             </View>
           );
