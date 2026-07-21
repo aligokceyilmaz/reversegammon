@@ -15,10 +15,12 @@ import {
   loadProfile,
   onlineWinRate,
   saveProfile,
+  setMutedPref,
   setPro,
   setTheme,
   winRate,
 } from '../profile';
+import { setMuted } from '../sound';
 import type { Profile } from '../profile';
 import { BoardSvg } from './BoardSvg';
 import { THEMES } from './themes';
@@ -177,6 +179,14 @@ export function MenuScreen({ onPlay }: Props) {
     await setPro(next.isPro);
   }
 
+  async function toggleMute() {
+    if (!profile) return;
+    const next = { ...profile, muted: !profile.muted };
+    setProfile(next);
+    setMuted(next.muted);
+    await setMutedPref(next.muted);
+  }
+
   async function submitName() {
     const name = nameInput.trim().slice(0, 16);
     if (!name || !profile) return;
@@ -296,6 +306,9 @@ export function MenuScreen({ onPlay }: Props) {
         </Pressable>
         <Pressable style={styles.ghostBtn} onPress={() => setShowRules(true)}>
           <Text style={styles.ghostBtnText}>❓ Nasıl Oynanır?</Text>
+        </Pressable>
+        <Pressable style={styles.ghostBtn} onPress={toggleMute}>
+          <Text style={styles.ghostBtnText}>{profile?.muted ? '🔇' : '🔊'}</Text>
         </Pressable>
       </View>
 

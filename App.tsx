@@ -1,6 +1,8 @@
 import { StatusBar } from 'expo-status-bar';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { loadProfile } from './src/profile';
+import { initSound } from './src/sound';
 import { GameScreen } from './src/ui/GameScreen';
 import type { GameMode, OnlineCtx } from './src/ui/GameScreen';
 import { MenuScreen } from './src/ui/MenuScreen';
@@ -13,6 +15,10 @@ type Screen =
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>({ kind: 'menu' });
+
+  useEffect(() => {
+    loadProfile().then((p) => initSound(p.muted));
+  }, []);
 
   return (
     <SafeAreaProvider>

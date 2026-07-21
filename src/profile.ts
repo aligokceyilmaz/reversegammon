@@ -19,6 +19,8 @@ export interface Profile {
   theme: string;
   /** Pro üyelik (şimdilik test amaçlı yerel; mağazada satın almaya bağlanacak) */
   isPro: boolean;
+  /** Ses efektleri kapalı mı? */
+  muted: boolean;
 }
 
 export const emptyProfile: Profile = {
@@ -30,6 +32,7 @@ export const emptyProfile: Profile = {
   onlineWins: 0,
   theme: 'classic',
   isPro: false,
+  muted: false,
 };
 
 /** Seçilebilir avatarlar (üst sıra kadın, alt sıra erkek) */
@@ -79,6 +82,12 @@ export async function setTheme(theme: string): Promise<void> {
 export async function setPro(isPro: boolean): Promise<void> {
   const p = await loadProfile();
   p.isPro = isPro;
+  await saveProfile(p);
+}
+
+export async function setMutedPref(muted: boolean): Promise<void> {
+  const p = await loadProfile();
+  p.muted = muted;
   await saveProfile(p);
 }
 

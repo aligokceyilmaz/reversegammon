@@ -19,10 +19,12 @@ import {
   newGame,
   randomDie,
   rollDice,
+  topRun,
   TOTAL_CHECKERS,
 } from '../engine';
-import type { DestOption, GameState, MoveSource, Player } from '../engine';
+import type { DestOption, GameState, Move, MoveSource, Player } from '../engine';
 import { chooseMove } from '../engine/ai';
+import { play } from '../sound';
 import { loadProfile, recordAiResult, recordOnlineResult } from '../profile';
 import {
   abandonGame,
@@ -73,6 +75,22 @@ interface Props {
 /** AI her zaman Siyah (oyuncu 1) olarak oynar */
 const AI_PLAYER: Player = 1;
 const EMPTY_POINTS: ReadonlySet<number> = new Set();
+
+/** Bir hamle dizisi için uygun ses efektini seçer (kilitleme > toplama > koyma > ilerletme) */
+function moveSound(prev: GameState, moves: Move[]): 'lock' | 'place' | 'move' {
+  let s = prev;
+  let lock = false;
+  let place = false;
+  for (const m of moves) {
+    if (m.type !== 'bearoff') {
+      const run = topRun(s.points[m.to]);
+      if (run && run.player !== s.turn && run.count === 1) lock = true;
+      if (m.type === 'place') place = true;
+    }
+    s = applyMove(s, m);
+  }
+  return lock ? 'lock' : place ? 'place' : 'move';
+}
 /** Tur süresi (sn); test kancası ile değiştirilebilir */
 const TURN_SECONDS =
   (globalThis as { __TURN_SECONDS__?: number }).__TURN_SECONDS__ ?? 30;
@@ -282,6 +300,7 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
   /** Bir hedef seçeneğini (tek hamle ya da kombine dizi) tek geri-alma adımı olarak uygula */
   function doApplyOption(option: DestOption) {
     setUndoStack((s) => (isOnline ? s : [...s, ui.current.game]));
+    play(moveSound(ui.current.game, option.moves));
     let next = ui.current.game;
     for (const m of option.moves) next = applyMove(next, m);
     commit(next);
@@ -520,6 +539,7 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
       t = setTimeout(() => {
         const d1 = randomDie();
         const d2 = randomDie();
+        play('dice');
         setGame(rollDice(game, d1, d2));
         setRollPopup({ dice: [d1, d2], player: AI_PLAYER, key: Date.now() });
         setUndoStack([]);
@@ -539,6 +559,7 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
         });
         t2 = setTimeout(() => {
           setAiPreview(null);
+          play(moveSound(game, [m]));
           setGame(applyMove(game, m));
         }, 1300);
       }, 900);
@@ -588,6 +609,7 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
   useEffect(() => {
     if (phase === 'over' && game.winner !== null && !recordedRef.current) {
       recordedRef.current = true;
+      play('win');
       if (mode === 'ai') recordAiResult(game.winner === 0);
       else if (isOnline) recordOnlineResult(game.winner === mySeat);
     }
@@ -634,6 +656,7 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
   function doRoll() {
     const d1 = randomDie();
     const d2 = randomDie();
+    play('dice');
     commit(rollDice(game, d1, d2));
     setRollPopup({ dice: [d1, d2], player: game.turn, key: Date.now() });
     setUndoStack([]);
@@ -1013,6 +1036,9 @@ function RollPopup({
   playerName: string;
 }) {
   const scale = useRef(new Animated.Value(0.2)).current;
+  // Yuvarlanma: kısa süre rastgele yüzler göster, sonra gerçek sonuca otur
+  const [faces, setFaces] = useState<[number, number]>(dice);
+  const [settled, setSettled] = useState(false);
   useEffect(() => {
     Animated.spring(scale, {
       toValue: 1,
@@ -1020,20 +1046,34 @@ function RollPopup({
       tension: 120,
       useNativeDriver: true,
     }).start();
-  }, [scale]);
+    let n = 0;
+    const iv = setInterval(() => {
+      n += 1;
+      if (n >= 7) {
+        clearInterval(iv);
+        setFaces(dice);
+        setSettled(true);
+      } else {
+        setFaces([1 + ((Math.random() * 6) | 0), 1 + ((Math.random() * 6) | 0)]);
+      }
+    }, 55);
+    return () => clearInterval(iv);
+  }, [scale, dice]);
   return (
     <View style={styles.rollOverlay} pointerEvents="none">
       <Animated.View style={[styles.rollBox, { transform: [{ scale }] }]}>
         <Text style={styles.rollName}>{playerName}</Text>
         <View style={styles.rollDice}>
-          <View style={{ transform: [{ rotate: '-10deg' }] }}>
-            <Die value={dice[0]} size={56} />
+          <View style={{ transform: [{ rotate: settled ? '-10deg' : '0deg' }] }}>
+            <Die value={faces[0]} size={56} />
           </View>
-          <View style={{ transform: [{ rotate: '8deg' }] }}>
-            <Die value={dice[1]} size={56} />
+          <View style={{ transform: [{ rotate: settled ? '8deg' : '0deg' }] }}>
+            <Die value={faces[1]} size={56} />
           </View>
         </View>
-        {dice[0] === dice[1] && <Text style={styles.rollDouble}>ÇİFT! ×4</Text>}
+        {settled && dice[0] === dice[1] && (
+          <Text style={styles.rollDouble}>ÇİFT! ×4</Text>
+        )}
       </Animated.View>
     </View>
   );
