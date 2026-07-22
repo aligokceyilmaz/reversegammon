@@ -8,74 +8,95 @@
 <style>
   :root { color-scheme: light dark; }
   * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: #12100d; color: #f3e9d5; line-height: 1.6;
-  }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #12100d; color: #f3e9d5; line-height: 1.6; }
   a { color: #e8a33d; }
-  .wrap { max-width: 720px; margin: 0 auto; padding: 32px 20px 64px; }
-  header { text-align: center; }
-  header img { width: min(240px, 66%); height: auto; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 24px 20px 64px; }
+  header { text-align: center; } header img { width: min(240px, 66%); height: auto; }
   h1 { text-align: center; }
-  h2 { margin-top: 36px; border-bottom: 1px solid #3a2f22; padding-bottom: 6px; }
+  h2 { margin-top: 32px; border-bottom: 1px solid #3a2f22; padding-bottom: 6px; }
   .q { font-weight: 700; color: #f7dfac; margin-top: 18px; }
-  .contact { background: #1c1710; border: 1px solid #3a2f22; border-radius: 12px; padding: 16px 20px; margin: 24px 0; }
-  .tr { color: #bba483; }
-  hr.sep { border: none; border-top: 1px dashed #3a2f22; margin: 40px 0; }
+  .contact { background: #1c1710; border: 1px solid #3a2f22; border-radius: 12px; padding: 16px 20px; margin: 20px 0; }
   footer { margin-top: 48px; text-align: center; color: #8f7c5e; font-size: 0.9rem; }
+  .langbar { display: flex; justify-content: center; gap: 8px; margin: 16px 0 4px; }
+  .langbar button { padding: 6px 16px; border-radius: 999px; border: 1px solid #bba483; background: transparent; color: #f3e9d5; font-weight: 600; cursor: pointer; font-size: 0.95rem; }
+  .langbar button.active { background: #e8a33d; color: #33200f; border-color: #e8a33d; }
+  [data-lang] { display: none; } [data-lang].show { display: block; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header><img src="logo.png" alt="ALVAT" /></header>
-  <h1>Support</h1>
 
-  <div class="contact">
-    <strong>Need help?</strong> Email us and we'll get back to you:<br />
-    <a href="mailto:aligokceyilmaz@gmail.com">aligokceyilmaz@gmail.com</a>
+  <div class="langbar">
+    <button data-set="en" class="active" onclick="setLang('en')">English</button>
+    <button data-set="tr" onclick="setLang('tr')">Türkçe</button>
   </div>
 
-  <h2>Frequently Asked Questions</h2>
+  <!-- ENGLISH -->
+  <div data-lang="en" class="show">
+    <h1>Support</h1>
+    <div class="contact"><strong>Need help?</strong> Email us and we'll get back to you:<br />
+      <a href="mailto:aligokceyilmaz@gmail.com">aligokceyilmaz@gmail.com</a></div>
+    <h2>Frequently Asked Questions</h2>
+    <p class="q">What is ALVAT?</p>
+    <p>ALVAT is <em>reverse backgammon</em>. The board, checkers and dice are classic,
+      but the rules are flipped: the board starts empty, you place your checkers with
+      the dice, and instead of hitting you lock the opponent by sitting on top of a
+      lone checker. The first to bring all 15 checkers across and bear them off wins.</p>
+    <p class="q">How do I play?</p>
+    <p>Open the app and tap <strong>“How to Play?”</strong> in the main menu — a short
+      illustrated guide walks you through every rule step by step.</p>
+    <p class="q">How does online play work?</p>
+    <p>Tap <strong>Play Online</strong> and you'll be matched with another player in
+      real time. You just need an internet connection — no account or sign-up required.</p>
+    <p class="q">Is it free?</p>
+    <p>Yes, ALVAT is free to download and play.</p>
+    <p class="q">How do I change the language?</p>
+    <p>Tap the 🌐 language button at the top-right of the main menu to switch between
+      English and Turkish.</p>
+    <p class="q">I found a bug or have a suggestion.</p>
+    <p>We'd love to hear it — email
+      <a href="mailto:aligokceyilmaz@gmail.com">aligokceyilmaz@gmail.com</a>.</p>
+  </div>
 
-  <p class="q">What is ALVAT?</p>
-  <p>ALVAT is <em>reverse backgammon</em>. The board, checkers and dice are classic,
-  but the rules are flipped: the board starts empty, you place your checkers with the
-  dice, and instead of hitting you lock the opponent by sitting on top of a lone
-  checker. The first to bring all 15 checkers across and bear them off wins.</p>
+  <!-- TURKISH -->
+  <div data-lang="tr">
+    <h1>Destek</h1>
+    <div class="contact"><strong>Yardıma mı ihtiyacın var?</strong> Bize e-posta gönder:<br />
+      <a href="mailto:aligokceyilmaz@gmail.com">aligokceyilmaz@gmail.com</a></div>
+    <h2>Sık Sorulan Sorular</h2>
+    <p class="q">ALVAT nedir?</p>
+    <p>ALVAT bir <em>ters tavla</em> oyunudur. Tahta, pullar ve zar klasik; ama kurallar
+      tersine: tahta boş başlar, pullarını zarla yerleştirirsin ve rakibi kırmak yerine
+      tek pulunun üstüne oturarak kilitlersin. 15 pulunu ilk toplayan kazanır.</p>
+    <p class="q">Nasıl oynanır?</p>
+    <p>Uygulamayı aç ve ana menüdeki <strong>“Nasıl Oynanır?”</strong> bölümüne dokun —
+      tüm kuralları görsellerle adım adım anlatır.</p>
+    <p class="q">Online oyun nasıl çalışır?</p>
+    <p><strong>Online Oyna</strong>'ya dokun, gerçek zamanlı olarak başka bir oyuncuyla
+      eşleşirsin. Yalnızca internet bağlantısı yeterli — hesap veya kayıt gerekmez.</p>
+    <p class="q">Ücretsiz mi?</p>
+    <p>Evet, ALVAT'ı indirmek ve oynamak ücretsiz.</p>
+    <p class="q">Dili nasıl değiştiririm?</p>
+    <p>Ana menünün sağ üstündeki 🌐 dil butonuna dokunarak İngilizce ve Türkçe arasında
+      geçiş yapabilirsin.</p>
+    <p class="q">Hata buldum veya önerim var.</p>
+    <p>Duymak isteriz —
+      <a href="mailto:aligokceyilmaz@gmail.com">aligokceyilmaz@gmail.com</a>.</p>
+  </div>
 
-  <p class="q">How do I play?</p>
-  <p>Open the app and tap <strong>“How to Play?”</strong> in the main menu — a short
-  illustrated guide walks you through every rule step by step.</p>
-
-  <p class="q">How does online play work?</p>
-  <p>Tap <strong>Play Online</strong> and you'll be matched with another player in
-  real time. You just need an internet connection — no account or sign-up required.</p>
-
-  <p class="q">Is it free?</p>
-  <p>Yes, ALVAT is free to download and play.</p>
-
-  <p class="q">How do I change the language?</p>
-  <p>Tap the 🌐 language button at the top-right of the main menu to switch between
-  English and Turkish.</p>
-
-  <p class="q">I found a bug or have a suggestion.</p>
-  <p>We'd love to hear it — email
-  <a href="mailto:aligokceyilmaz@gmail.com">aligokceyilmaz@gmail.com</a>.</p>
-
-  <hr class="sep" />
-
-  <h2 class="tr">Türkçe · Destek</h2>
-  <p class="tr">Her türlü soru, hata bildirimi ve öneri için bize e-posta gönderin:
-  <a href="mailto:aligokceyilmaz@gmail.com">aligokceyilmaz@gmail.com</a></p>
-  <p class="tr"><strong>ALVAT nedir?</strong> Ters tavla. Tahta boş başlar, pulları
-  zarla yerleştirirsiniz ve rakibi kırmak yerine tek pulunun üstüne oturarak
-  kilitlersiniz. 15 pulunu ilk toplayan kazanır. Oyun içindeki
-  <strong>“Nasıl Oynanır?”</strong> bölümü tüm kuralları görsellerle anlatır.</p>
-
-  <footer>
-    <p><a href="index.html">ALVAT</a> · © 2026 Ali Gökçe Yılmaz</p>
-  </footer>
+  <footer><p><a href="index.html">ALVAT</a> · © 2026 Ali Gökçe Yılmaz</p></footer>
 </div>
+<script>
+  function setLang(l) {
+    document.querySelectorAll('[data-lang]').forEach(function (el) {
+      el.classList.toggle('show', el.getAttribute('data-lang') === l);
+    });
+    document.querySelectorAll('.langbar button').forEach(function (b) {
+      b.classList.toggle('active', b.getAttribute('data-set') === l);
+    });
+    document.documentElement.lang = l;
+  }
+</script>
 </body>
 </html>
