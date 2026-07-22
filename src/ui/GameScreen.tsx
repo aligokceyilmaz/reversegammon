@@ -35,7 +35,9 @@ import type { Seat } from '../online/match';
 import { BoardSvg, boardGeometry } from './BoardSvg';
 import { Die } from './Dice';
 import { getTheme } from './themes';
-import { colors, PLAYER_NAMES } from './theme';
+import { colors } from './theme';
+import { useI18n } from '../i18n';
+import type { TFunc } from '../i18n';
 
 type Phase = 'opening' | 'playing' | 'over';
 
@@ -98,12 +100,13 @@ const TURN_SECONDS =
 export function GameScreen({ mode, matchLen, online, onExit }: Props) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const { t } = useI18n();
   const isOnline = mode === 'online' && !!online;
   const mySeat: Player = online?.seat ?? 0;
   const [phase, setPhase] = useState<Phase>(isOnline ? 'playing' : 'opening');
   const [opponentLeft, setOpponentLeft] = useState(false);
   const [oppInfo, setOppInfo] = useState<Seat>(
-    online?.opponent ?? { uid: '', name: 'Rakip', avatar: '🙂' },
+    online?.opponent ?? { uid: '', name: t('game.opponent'), avatar: '🙂' },
   );
   const [opening, setOpening] = useState<{ w: number; b: number } | null>(null);
   const [game, setGame] = useState<GameState>(() => newGame());
@@ -144,40 +147,46 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
       setProfileName(p.name);
       setProfileAvatar(p.avatar);
       // Pro değilse seçili tema kilitliyse klasiğe düş
-      const t = getTheme(p.theme);
-      setThemeId(t.pro && !p.isPro ? 'classic' : t.id);
+      const th = getTheme(p.theme);
+      setThemeId(th.pro && !p.isPro ? 'classic' : th.id);
     });
   }, []);
 
   function nameFor(p: Player): string {
     if (isOnline && online) {
-      const meName = profileName || 'Sen';
-      const opName = oppInfo.name || 'Rakip';
-      if (p === mySeat) return `${profileAvatar || ''} ${meName} (Sen)`.trim();
+      const meName = profileName || t('game.you');
+      const opName = oppInfo.name || t('game.opponent');
+      if (p === mySeat)
+        return `${profileAvatar || ''} ${meName} ${t('game.youSuffix')}`.trim();
       return `${oppInfo.avatar || ''} ${opName}`.trim();
     }
     if (p === 0) {
       const av = profileAvatar ? `${profileAvatar} ` : '';
-      return profileName ? `${av}Beyaz (${profileName})` : `${av}Beyaz`;
+      return profileName
+        ? `${av}${t('game.white')} (${profileName})`
+        : `${av}${t('game.white')}`;
     }
-    return mode === 'ai' ? 'Siyah (Bilgisayar)' : 'Siyah';
+    return mode === 'ai' ? t('game.blackComputer') : t('game.black');
   }
 
   /** Skorboard için koltuk bilgisi (kısa) */
   function seatInfo(p: Player): { avatar: string; name: string } {
     if (isOnline && online) {
       if (p === mySeat)
-        return { avatar: profileAvatar || '⚪', name: `${profileName || 'Sen'} (Sen)` };
+        return {
+          avatar: profileAvatar || '⚪',
+          name: `${profileName || t('game.you')} ${t('game.youSuffix')}`,
+        };
       return {
         avatar: oppInfo.avatar || '⚫',
-        name: oppInfo.name || 'Rakip',
+        name: oppInfo.name || t('game.opponent'),
       };
     }
     if (p === 0)
-      return { avatar: profileAvatar || '⚪', name: profileName || 'Beyaz' };
+      return { avatar: profileAvatar || '⚪', name: profileName || t('game.white') };
     return {
       avatar: mode === 'ai' ? '🤖' : '⚫',
-      name: mode === 'ai' ? 'Bilgisayar' : 'Siyah',
+      name: mode === 'ai' ? t('game.computer') : t('game.black'),
     };
   }
 
@@ -476,12 +485,12 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
     // Online'da yalnızca kendi turumu sonlandırırım; rakibinki snapshot ile gelir
     if (opponentTurn) return;
     if (game.rolled && game.dice.length === 0 && !paused) {
-      const t = setTimeout(() => {
+      const timer = setTimeout(() => {
         commit(endTurn(ui.current.game));
         setUndoStack([]);
         setSelected(null);
       }, 650);
-      return () => clearTimeout(t);
+      return () => clearTimeout(timer);
     }
   }, [game, phase, paused, opponentTurn]);
 
@@ -533,10 +542,10 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
   // (hamle yoksa aşağıdaki otomatik pas akışı devreye girer)
   useEffect(() => {
     if (!aiTurn || paused) return;
-    let t: ReturnType<typeof setTimeout>;
-    let t2: ReturnType<typeof setTimeout> | undefined;
+    let timer: ReturnType<typeof setTimeout>;
+    let timer2: ReturnType<typeof setTimeout> | undefined;
     if (game.rolled === null) {
-      t = setTimeout(() => {
+      timer = setTimeout(() => {
         const d1 = randomDie();
         const d2 = randomDie();
         play('dice');
@@ -546,7 +555,7 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
         setSelected(null);
       }, 1200);
     } else if (legal.length > 0) {
-      t = setTimeout(() => {
+      timer = setTimeout(() => {
         const m = chooseMove(game);
         if (!m) return;
         // Önce hangi pulu oynayacağını göster, sonra hamleyi uygula
@@ -557,7 +566,7 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
               : { kind: 'point', point: m.from },
           dest: m.type === 'bearoff' ? 'off' : m.to,
         });
-        t2 = setTimeout(() => {
+        timer2 = setTimeout(() => {
           setAiPreview(null);
           play(moveSound(game, [m]));
           setGame(applyMove(game, m));
@@ -565,8 +574,8 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
       }, 900);
     }
     return () => {
-      clearTimeout(t);
-      if (t2) clearTimeout(t2);
+      clearTimeout(timer);
+      if (timer2) clearTimeout(timer2);
       setAiPreview(null);
     };
   }, [aiTurn, game, legal, paused]);
@@ -585,15 +594,15 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
       return;
     const partial =
       game.dice.length < (game.rolled[0] === game.rolled[1] ? 4 : 2);
-    setNoMovePopup(partial ? 'Kalan zar oynanamıyor' : 'Hamle yapılamıyor');
-    const t = setTimeout(() => {
+    setNoMovePopup(partial ? t('game.remainDie') : t('game.noMove'));
+    const timer = setTimeout(() => {
       setNoMovePopup(null);
       commit(endTurn(ui.current.game));
       setUndoStack([]);
       setSelected(null);
     }, 1700);
     return () => {
-      clearTimeout(t);
+      clearTimeout(timer);
       setNoMovePopup(null);
     };
   }, [phase, game, legal, paused, opponentTurn]);
@@ -601,8 +610,8 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
   // Zar popup'ı kısa süre sonra kaybolsun
   useEffect(() => {
     if (!rollPopup) return;
-    const t = setTimeout(() => setRollPopup(null), 1300);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setRollPopup(null), 1300);
+    return () => clearTimeout(timer);
   }, [rollPopup]);
 
   // Biten oyunu istatistiklere işle (bir kez): AI ya da online
@@ -755,7 +764,7 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
             </Text>
             {matchLen > 1 && (
               <Text style={styles.sbScoreSub}>
-                Oyun {gameNo}/{matchLen}
+                {t('game.gameCount', { n: gameNo, len: matchLen })}
               </Text>
             )}
           </View>
@@ -794,6 +803,7 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
             <PlayerPanel
               key={`p${p}`}
               player={p}
+              t={t}
               name={nameFor(p)}
               game={game}
               phase={phase}
@@ -885,8 +895,10 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
       {phase === 'playing' && game.rolled === null && !inputLocked && (
         <View style={styles.rollOverlay} pointerEvents="box-none">
           <Pressable style={styles.centerRollBtn} onPress={doRoll}>
-            <Text style={styles.centerRollText}>🎲 Zar At</Text>
-            <Text style={styles.centerRollTimer}>⏱ {timeLeft} sn</Text>
+            <Text style={styles.centerRollText}>{t('game.rollDice')}</Text>
+            <Text style={styles.centerRollTimer}>
+              ⏱ {t('game.seconds', { n: timeLeft })}
+            </Text>
           </Pressable>
         </View>
       )}
@@ -895,7 +907,7 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
       {opponentTurn && (
         <View style={styles.rollOverlay} pointerEvents="none">
           <View style={styles.waitBox}>
-            <Text style={styles.waitText}>⏳ Rakip oynuyor…</Text>
+            <Text style={styles.waitText}>{t('game.oppPlaying')}</Text>
           </View>
         </View>
       )}
@@ -905,7 +917,7 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
         <View style={styles.rollOverlay} pointerEvents="none">
           <View style={styles.noMoveBox}>
             <Text style={styles.noMoveText}>⚠️ {noMovePopup}</Text>
-            <Text style={styles.noMoveSub}>sıra rakibe geçiyor…</Text>
+            <Text style={styles.noMoveSub}>{t('game.turnPassing')}</Text>
           </View>
         </View>
       )}
@@ -925,6 +937,7 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
           key={rollPopup.key}
           dice={rollPopup.dice}
           playerName={nameFor(rollPopup.player)}
+          t={t}
         />
       )}
 
@@ -932,16 +945,16 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
       {paused && (
         <View style={styles.overlay}>
           <View style={styles.modal}>
-            <Text style={styles.modalTitle}>⏸ Duraklatıldı</Text>
-            <Text style={styles.modalSub}>Süre ve rakip bekliyor</Text>
+            <Text style={styles.modalTitle}>{t('game.paused')}</Text>
+            <Text style={styles.modalSub}>{t('game.pausedSub')}</Text>
             <Pressable
               style={styles.primaryBtn}
               onPress={() => setPaused(false)}
             >
-              <Text style={styles.primaryBtnText}>▶ Devam Et</Text>
+              <Text style={styles.primaryBtnText}>{t('game.resume')}</Text>
             </Pressable>
             <Pressable style={styles.ghostBtn} onPress={exitGame}>
-              <Text style={styles.ghostBtnText}>Menüye Dön</Text>
+              <Text style={styles.ghostBtnText}>{t('game.backToMenu')}</Text>
             </Pressable>
           </View>
         </View>
@@ -951,6 +964,7 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
         <OpeningOverlay
           opening={opening}
           aiMode={mode === 'ai'}
+          t={t}
           onRoll={() => setOpening({ w: randomDie(), b: randomDie() })}
           onStart={(starter) => {
             setGame(newGame(starter));
@@ -963,10 +977,10 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
       {opponentLeft && phase !== 'over' && (
         <View style={styles.overlay}>
           <View style={styles.modal}>
-            <Text style={styles.modalTitle}>👋 Rakip ayrıldı</Text>
-            <Text style={styles.modalSub}>Oyun sonlandı.</Text>
+            <Text style={styles.modalTitle}>{t('oppLeft.title')}</Text>
+            <Text style={styles.modalSub}>{t('oppLeft.sub')}</Text>
             <Pressable style={styles.primaryBtn} onPress={onExit}>
-              <Text style={styles.primaryBtnText}>Menüye Dön</Text>
+              <Text style={styles.primaryBtnText}>{t('game.backToMenu')}</Text>
             </Pressable>
           </View>
         </View>
@@ -978,43 +992,48 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
             {isOnline ? (
               <>
                 <Text style={styles.modalTitle}>
-                  {game.winner === mySeat ? '🏆 Kazandın!' : '😔 Kaybettin'}
+                  {game.winner === mySeat ? t('over.youWon') : t('over.youLost')}
                 </Text>
                 <Text style={styles.modalSub}>
                   {game.winner === mySeat
-                    ? '15 pulunu ilk sen topladın.'
-                    : 'Rakip 15 pulunu önce topladı.'}
+                    ? t('over.youWonSub')
+                    : t('over.youLostSub')}
                 </Text>
                 <Pressable style={styles.primaryBtn} onPress={onExit}>
-                  <Text style={styles.primaryBtnText}>Menüye Dön</Text>
+                  <Text style={styles.primaryBtnText}>{t('game.backToMenu')}</Text>
                 </Pressable>
               </>
             ) : (
               <>
                 <Text style={styles.modalTitle}>
-                  🏆 {nameFor(game.winner)}{' '}
-                  {matchOver && matchLen > 1 ? 'seriyi kazandı!' : 'kazandı!'}
+                  {t(matchOver && matchLen > 1 ? 'over.wonSeries' : 'over.won', {
+                    name: nameFor(game.winner),
+                  })}
                 </Text>
                 <Text style={styles.modalSub}>
                   {matchLen > 1
-                    ? `Seri durumu: ${series[0]} – ${series[1]} (${matchLen} oyunluk seri)`
-                    : '15 pulunu ilk toplayan oldu.'}
+                    ? t('over.seriesStatus', {
+                        a: series[0],
+                        b: series[1],
+                        len: matchLen,
+                      })
+                    : t('over.firstToBearOff')}
                 </Text>
                 {matchOver ? (
                   <Pressable style={styles.primaryBtn} onPress={newSeries}>
-                    <Text style={styles.primaryBtnText}>Yeni Seri</Text>
+                    <Text style={styles.primaryBtnText}>{t('over.newSeries')}</Text>
                   </Pressable>
                 ) : (
                   <Pressable style={styles.primaryBtn} onPress={nextGame}>
                     <Text style={styles.primaryBtnText}>
                       {matchLen > 1
-                        ? `Sonraki Oyun (${gameNo + 1}/${matchLen})`
-                        : 'Yeni Oyun'}
+                        ? t('over.nextGame', { n: gameNo + 1, len: matchLen })
+                        : t('over.newGame')}
                     </Text>
                   </Pressable>
                 )}
                 <Pressable style={styles.ghostBtn} onPress={exitGame}>
-                  <Text style={styles.ghostBtnText}>Menüye Dön</Text>
+                  <Text style={styles.ghostBtnText}>{t('game.backToMenu')}</Text>
                 </Pressable>
               </>
             )}
@@ -1031,9 +1050,11 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
 function RollPopup({
   dice,
   playerName,
+  t,
 }: {
   dice: [number, number];
   playerName: string;
+  t: TFunc;
 }) {
   const scale = useRef(new Animated.Value(0.2)).current;
   // Yuvarlanma: kısa süre rastgele yüzler göster, sonra gerçek sonuca otur
@@ -1072,7 +1093,7 @@ function RollPopup({
           </View>
         </View>
         {settled && dice[0] === dice[1] && (
-          <Text style={styles.rollDouble}>ÇİFT! ×4</Text>
+          <Text style={styles.rollDouble}>{t('game.double')}</Text>
         )}
       </Animated.View>
     </View>
@@ -1084,32 +1105,34 @@ function RollPopup({
 function OpeningOverlay({
   opening,
   aiMode,
+  t,
   onRoll,
   onStart,
 }: {
   opening: { w: number; b: number } | null;
   aiMode: boolean;
+  t: TFunc;
   onRoll: () => void;
   onStart: (p: Player) => void;
 }) {
   const tie = opening !== null && opening.w === opening.b;
   const starter: Player | null =
     opening && !tie ? (opening.w > opening.b ? 0 : 1) : null;
-  const whiteLabel = aiMode ? 'SEN' : 'Beyaz';
-  const blackLabel = aiMode ? 'Bilgisayar' : 'Siyah';
+  const whiteLabel = aiMode ? t('opening.you') : t('game.white');
+  const blackLabel = aiMode ? t('game.computer') : t('game.black');
   const starterText =
     starter === null
       ? ''
       : aiMode
         ? starter === 0
-          ? '🎉 Sen başlıyorsun!'
-          : 'Bilgisayar başlıyor'
-        : `${PLAYER_NAMES[starter]} başlıyor`;
+          ? t('opening.youStart')
+          : t('opening.computerStarts')
+        : t('opening.starts', { name: t(starter === 0 ? 'game.white' : 'game.black') });
   return (
     <View style={styles.overlay}>
       <View style={styles.modal}>
-        <Text style={styles.modalTitle}>Başlangıç Zarı</Text>
-        <Text style={styles.modalSub}>Yüksek atan oyuna başlar</Text>
+        <Text style={styles.modalTitle}>{t('opening.title')}</Text>
+        <Text style={styles.modalSub}>{t('opening.sub')}</Text>
         {opening && (
           <View style={styles.openDice}>
             <View style={styles.openDie}>
@@ -1124,20 +1147,20 @@ function OpeningOverlay({
             </View>
           </View>
         )}
-        {tie && <Text style={styles.modalSub}>Berabere! Tekrar atın.</Text>}
+        {tie && <Text style={styles.modalSub}>{t('opening.tie')}</Text>}
         {starter !== null ? (
           <>
             <Text style={[styles.modalSub, styles.starterText]}>
               {starterText}
             </Text>
             <Pressable style={styles.primaryBtn} onPress={() => onStart(starter)}>
-              <Text style={styles.primaryBtnText}>Başla</Text>
+              <Text style={styles.primaryBtnText}>{t('opening.start')}</Text>
             </Pressable>
           </>
         ) : (
           <Pressable style={styles.primaryBtn} onPress={onRoll}>
             <Text style={styles.primaryBtnText}>
-              {opening ? 'Tekrar At' : 'Zarları At'}
+              {t(opening ? 'opening.rollAgain' : 'opening.rollDiceBtn')}
             </Text>
           </Pressable>
         )}
@@ -1150,6 +1173,7 @@ function OpeningOverlay({
 
 interface PanelProps {
   player: Player;
+  t: TFunc;
   name: string;
   game: GameState;
   phase: Phase;
@@ -1167,6 +1191,7 @@ interface PanelProps {
 
 function PlayerPanel({
   player,
+  t,
   name,
   game,
   phase,
@@ -1199,16 +1224,18 @@ function PlayerPanel({
             return <Die key={i} value={v} size={34} dimmed={used} />;
           })}
           {game.rolled[0] === game.rolled[1] && (
-            <Text style={styles.doubleText}>×4 ({game.dice.length})</Text>
+            <Text style={styles.doubleText}>
+              {t('panel.doubleCount', { n: game.dice.length })}
+            </Text>
           )}
         </View>
       ) : aiControlled ? (
-        <Text style={styles.aiThinking}>düşünüyor…</Text>
+        <Text style={styles.aiThinking}>{t('panel.thinking')}</Text>
       ) : null}
 
       {canUndo && !aiControlled && (
         <Pressable style={styles.ghostBtn} onPress={onUndo}>
-          <Text style={styles.ghostBtnText}>↩ Geri Al</Text>
+          <Text style={styles.ghostBtnText}>{t('panel.undo')}</Text>
         </Pressable>
       )}
     </View>
@@ -1227,7 +1254,7 @@ function PlayerPanel({
       }
       style={[styles.tray, offActive && styles.trayOffActive]}
     >
-      <Text style={styles.trayLabel}>Toplanan</Text>
+      <Text style={styles.trayLabel}>{t('panel.borneOff')}</Text>
       <View style={styles.trayRow}>
         <View
           style={[
@@ -1260,7 +1287,9 @@ function PlayerPanel({
             <Text style={styles.panelName} numberOfLines={1}>{name}</Text>
           </View>
           {handCount > 0 && (
-            <Text style={styles.handCountText}>Elde {handCount}</Text>
+            <Text style={styles.handCountText}>
+              {t('panel.inHand', { n: handCount })}
+            </Text>
           )}
         </View>
         {dice}
@@ -1276,7 +1305,9 @@ function PlayerPanel({
         <Text style={styles.panelName} numberOfLines={1}>{name}</Text>
       </View>
       {handCount > 0 && (
-        <Text style={styles.handCountText}>Elde {handCount} pul (barda)</Text>
+        <Text style={styles.handCountText}>
+          {t('panel.inHandBar', { n: handCount })}
+        </Text>
       )}
       {offTray}
       <View style={styles.panelSpacer} />

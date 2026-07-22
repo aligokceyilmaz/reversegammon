@@ -21,6 +21,3 @@ export const colors = {
   accent: '#E8A33D',
   danger: '#D95B43',
 };
-
-export const PLAYER_NAMES = ['Beyaz', 'Siyah'] as const;
-export const AI_NAME = '🤖 Bilgisayar';

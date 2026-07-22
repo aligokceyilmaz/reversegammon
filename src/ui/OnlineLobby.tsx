@@ -4,6 +4,7 @@ import { findMatch } from '../online/match';
 import type { MatchResult, Seat } from '../online/match';
 import { ensureSignedIn } from '../online/firebase';
 import { loadProfile } from '../profile';
+import { useI18n } from '../i18n';
 import { colors } from './theme';
 
 interface Props {
@@ -13,7 +14,8 @@ interface Props {
 
 /** Rakip aranıyor ekranı */
 export function OnlineLobby({ onMatched, onCancel }: Props) {
-  const [status, setStatus] = useState('Bağlanıyor…');
+  const { t } = useI18n();
+  const [status, setStatus] = useState(t('online.connecting'));
   const [seconds, setSeconds] = useState(0);
   const cancelRef = useRef({ cancelled: false });
 
@@ -26,19 +28,22 @@ export function OnlineLobby({ onMatched, onCancel }: Props) {
         const profile = await loadProfile();
         const me: Seat = {
           uid,
-          name: profile.name || 'Oyuncu',
+          name: profile.name || t('player.default'),
           avatar: profile.avatar || '🙂',
         };
-        setStatus('Rakip aranıyor…');
+        setStatus(t('online.searching'));
         iv = setInterval(() => setSeconds((s) => s + 1), 1000);
-        const result = await findMatch(me, () => setStatus('Rakip bekleniyor…'), cancel);
+        const result = await findMatch(me, () => setStatus(t('online.waiting')), cancel);
         if (cancel.cancelled || !result) return;
         // Rakibin gerçek adı/avatarı ilk snapshot'ta GameScreen'de güncellenir.
-        onMatched(result, { uid: '', name: 'Rakip', avatar: '🙂' }, uid);
+        onMatched(result, { uid: '', name: t('game.opponent'), avatar: '🙂' }, uid);
       } catch (e: unknown) {
         const err = e as { code?: string; message?: string };
         setStatus(
-          `Hata: ${err.code || ''} ${err.message || String(e)}`.trim(),
+          t('online.error', {
+            code: err.code || '',
+            msg: err.message || String(e),
+          }).trim(),
         );
       }
     })();
@@ -50,10 +55,10 @@ export function OnlineLobby({ onMatched, onCancel }: Props) {
 
   return (
     <View style={styles.root}>
-      <Text style={styles.title}>🌍 Online</Text>
+      <Text style={styles.title}>{t('online.title')}</Text>
       <ActivityIndicator size="large" color={colors.accent} style={{ marginVertical: 20 }} />
       <Text style={styles.status}>{status}</Text>
-      <Text style={styles.timer}>{seconds} sn</Text>
+      <Text style={styles.timer}>{t('game.seconds', { n: seconds })}</Text>
       <Pressable
         style={styles.cancelBtn}
         onPress={() => {
@@ -61,7 +66,7 @@ export function OnlineLobby({ onMatched, onCancel }: Props) {
           onCancel();
         }}
       >
-        <Text style={styles.cancelText}>İptal</Text>
+        <Text style={styles.cancelText}>{t('online.cancel')}</Text>
       </Pressable>
     </View>
   );

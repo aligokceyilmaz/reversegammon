@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { loadProfile } from './src/profile';
 import { initSound } from './src/sound';
+import { I18nProvider } from './src/i18n';
 import { GameScreen } from './src/ui/GameScreen';
 import type { GameMode, OnlineCtx } from './src/ui/GameScreen';
 import { MenuScreen } from './src/ui/MenuScreen';
@@ -22,6 +23,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
+      <I18nProvider>
       <StatusBar hidden />
       {screen.kind === 'menu' && (
         <MenuScreen
@@ -57,6 +59,7 @@ export default function App() {
           onExit={() => setScreen({ kind: 'menu' })}
         />
       )}
+      </I18nProvider>
     </SafeAreaProvider>
   );
 }

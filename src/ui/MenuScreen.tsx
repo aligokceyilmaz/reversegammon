@@ -22,6 +22,7 @@ import {
 } from '../profile';
 import { setMuted } from '../sound';
 import type { Profile } from '../profile';
+import { useI18n, LANG_NATIVE } from '../i18n';
 import { BoardSvg } from './BoardSvg';
 import { THEMES } from './themes';
 import { colors } from './theme';
@@ -43,8 +44,8 @@ function miniState(
 }
 
 interface HowToPage {
-  title: string;
-  text: string;
+  titleKey: string;
+  textKey: string;
   state: GameState;
   dests?: number[];
   sources?: number[];
@@ -54,32 +55,32 @@ interface HowToPage {
 
 const PAGES: HowToPage[] = [
   {
-    title: '1 · Boş Tahta, Desteden Başla',
-    text: 'Tahta boş başlar; 15 pulun ortadaki barın üzerindeki destede bekler. Zar değeriyle pulunu KENDİ bölgene (sağ alttaki 1-6 numaralı haneler) sokarsın. Örn. 5 ve 2 attıysan 5 ve 2 numaralı hanelere birer pul koyabilirsin.',
+    titleKey: 'howto.p1.title',
+    textKey: 'howto.p1.text',
     state: miniState({}),
     dests: [4, 1],
     handGlow: true,
   },
   {
-    title: '2 · İlerle ve Birleştir',
-    text: 'Elindeki pulları istersen tek tek, istersen gelen zarların TOPLAMI kadar direkt koyabilirsin. Örn. 5+2 attın: pulunu 5 hanesine koyup 2 ilerletirsin — ya da tek harekette toplam 7 ilerisine koyarsın. Yeşiller: önce 5 hanesi, sonra onun 2 ilerisi. Çift zarda da aynı mantık: 4-4 attıysan 4 hamle hakkın var; aynı pulu 4+4 ya da 4+4+4 ileriye tek seferde taşıyabilirsin. Koymak zorunlu da değil; tahtadaki pulunu da ilerletebilirsin.',
+    titleKey: 'howto.p2.title',
+    textKey: 'howto.p2.text',
     state: miniState({ 8: [0, 0] }, [13, 15]),
     dests: [4, 6],
     handGlow: true,
   },
   {
-    title: '3 · Kilitle!',
-    text: 'Rakibin TEK pulunun üstüne oturursan onu KİLİTLERSİN: üstündeki pul gidene kadar oynayamaz. Soldaki kulede beyaz, siyahı kilitlemiş. Üst üste 2 rakip pulu olan hane ise sana kapalıdır.',
+    titleKey: 'howto.p3.title',
+    textKey: 'howto.p3.text',
     state: miniState({ 9: [1, 0], 14: [1, 1] }, [14, 12]),
   },
   {
-    title: '4 · Kule Zinciri',
-    text: 'Kilitleyen tek pulun üstüne rakip de oturabilir: kuleler zincirlenir (siyah-beyaz-siyah...). En üstte aynı renkten 2 pul olduğu anda o hane tamamen kapanır ve alttakiler bekler.',
+    titleKey: 'howto.p4.title',
+    textKey: 'howto.p4.text',
     state: miniState({ 10: [1, 0, 1], 16: [1, 0, 0] }, [12, 12]),
   },
   {
-    title: '5 · Topla ve Kazan',
-    text: '15 pulunun tamamı karşı bölgeye (son 6 hane) ulaşınca toplama başlar: zar değerine göre pullar tahtadan çıkar. 15 pulunu ilk toplayan oyunu kazanır!',
+    titleKey: 'howto.p5.title',
+    textKey: 'howto.p5.text',
     state: (() => {
       const s = miniState(
         { 18: [0, 0, 0], 20: [0, 0], 22: [0] },
@@ -96,12 +97,13 @@ const PAGES: HowToPage[] = [
 function HowToPlay({ onClose }: { onClose: () => void }) {
   const [page, setPage] = useState(0);
   const { width, height } = useWindowDimensions();
+  const { t } = useI18n();
   const p = PAGES[page];
   const bw = Math.min(width - 48, 340);
   const bh = Math.min(height * 0.5, 420);
   return (
     <View style={styles.howtoOverlay}>
-      <Text style={styles.howtoTitle}>{p.title}</Text>
+      <Text style={styles.howtoTitle}>{t(p.titleKey)}</Text>
       <BoardSvg
         state={p.state}
         width={bw}
@@ -112,25 +114,25 @@ function HowToPlay({ onClose }: { onClose: () => void }) {
         handIsSource={!!p.handGlow}
         handSelected={!!p.handGlow}
       />
-      <Text style={styles.howtoText}>{p.text}</Text>
+      <Text style={styles.howtoText}>{t(p.textKey)}</Text>
       <View style={styles.howtoNav}>
         <Pressable
           style={[styles.ghostBtn, page === 0 && { opacity: 0.3 }]}
           disabled={page === 0}
           onPress={() => setPage(page - 1)}
         >
-          <Text style={styles.ghostBtnText}>‹ Geri</Text>
+          <Text style={styles.ghostBtnText}>{t('howto.back')}</Text>
         </Pressable>
         <Text style={styles.howtoCount}>
           {page + 1}/{PAGES.length}
         </Text>
         {page < PAGES.length - 1 ? (
           <Pressable style={styles.smallBtn} onPress={() => setPage(page + 1)}>
-            <Text style={styles.smallBtnText}>İleri ›</Text>
+            <Text style={styles.smallBtnText}>{t('howto.next')}</Text>
           </Pressable>
         ) : (
           <Pressable style={styles.smallBtn} onPress={onClose}>
-            <Text style={styles.smallBtnText}>Bitti ✓</Text>
+            <Text style={styles.smallBtnText}>{t('howto.done')}</Text>
           </Pressable>
         )}
       </View>
@@ -149,6 +151,7 @@ interface Props {
 
 export function MenuScreen({ onPlay }: Props) {
   const { width } = useWindowDimensions();
+  const { t, lang, toggleLang } = useI18n();
   const [showRules, setShowRules] = useState(false);
   const [showThemes, setShowThemes] = useState(false);
   const [matchLen, setMatchLen] = useState(1);
@@ -204,6 +207,12 @@ export function MenuScreen({ onPlay }: Props) {
 
   return (
     <View style={styles.root}>
+      {/* Dil seçici: diğer dile geçirir (varsayılan İngilizce) */}
+      <Pressable style={styles.langBtn} onPress={toggleLang} hitSlop={8}>
+        <Text style={styles.langBtnText}>
+          🌐 {LANG_NATIVE[lang === 'en' ? 'tr' : 'en']}
+        </Text>
+      </Pressable>
       <Image
         source={require('../../assets/logo.png')}
         style={{
@@ -212,13 +221,13 @@ export function MenuScreen({ onPlay }: Props) {
         }}
         resizeMode="contain"
       />
-      <Text style={styles.subtitle}>Ters tavla · Kilitle · İlk toplayan kazanır</Text>
+      <Text style={styles.subtitle}>{t('menu.subtitle')}</Text>
 
       {/* Profil kartı */}
       {profile !== null &&
         (needsName ? (
           <View style={styles.profileCard}>
-            <Text style={styles.profileLabel}>Avatarını ve adını seç</Text>
+            <Text style={styles.profileLabel}>{t('menu.chooseAvatar')}</Text>
             <View style={styles.avatarRow}>
               {AVATARS.map((a) => (
                 <Pressable
@@ -237,14 +246,14 @@ export function MenuScreen({ onPlay }: Props) {
               style={styles.nameInput}
               value={nameInput}
               onChangeText={setNameInput}
-              placeholder="örn. AliG"
+              placeholder={t('menu.namePlaceholder')}
               placeholderTextColor={colors.textDim}
               maxLength={16}
               autoCorrect={false}
               autoCapitalize="none"
             />
             <Pressable style={styles.smallBtn} onPress={submitName}>
-              <Text style={styles.smallBtnText}>Kaydet</Text>
+              <Text style={styles.smallBtnText}>{t('menu.save')}</Text>
             </Pressable>
           </View>
         ) : (
@@ -253,23 +262,29 @@ export function MenuScreen({ onPlay }: Props) {
               <Text style={styles.profileAvatar}>{profile.avatar || '👤'}</Text>
               <Text style={styles.profileName}>{profile.name}</Text>
               <Pressable onPress={() => setEditingName(true)} hitSlop={8}>
-                <Text style={styles.profileEdit}>değiştir</Text>
+                <Text style={styles.profileEdit}>{t('menu.change')}</Text>
               </Pressable>
             </View>
             <Text style={styles.profileStats}>
-              🤖 Bilgisayar: {profile.aiGames} oyun · {profile.aiWins} galibiyet
-              · %{winRate(profile)}
+              {t('menu.statsAi', {
+                games: profile.aiGames,
+                wins: profile.aiWins,
+                rate: winRate(profile),
+              })}
             </Text>
             <Text style={styles.profileStats}>
-              🌍 Online: {profile.onlineGames} oyun · {profile.onlineWins}{' '}
-              galibiyet · %{onlineWinRate(profile)}
+              {t('menu.statsOnline', {
+                games: profile.onlineGames,
+                wins: profile.onlineWins,
+                rate: onlineWinRate(profile),
+              })}
             </Text>
           </View>
         ))}
 
       {/* Seri uzunluğu */}
       <View style={styles.seriesRow}>
-        <Text style={styles.seriesLabel}>Seri:</Text>
+        <Text style={styles.seriesLabel}>{t('menu.series')}</Text>
         {[1, 3, 5].map((n) => (
           <Pressable
             key={n}
@@ -282,7 +297,7 @@ export function MenuScreen({ onPlay }: Props) {
                 matchLen === n && styles.seriesChipTextOn,
               ]}
             >
-              {n} Oyun
+              {t(n === 1 ? 'menu.seriesGameOne' : 'menu.seriesGameMany', { n })}
             </Text>
           </Pressable>
         ))}
@@ -292,20 +307,20 @@ export function MenuScreen({ onPlay }: Props) {
         style={[styles.primaryBtn, styles.onlineBtn]}
         onPress={() => onPlay('online', 1)}
       >
-        <Text style={styles.primaryBtnText}>🌍 Online Oyna</Text>
+        <Text style={styles.primaryBtnText}>{t('menu.online')}</Text>
       </Pressable>
       <Pressable style={styles.primaryBtn} onPress={() => onPlay('ai', matchLen)}>
-        <Text style={styles.primaryBtnText}>🤖 Tek Kişilik</Text>
+        <Text style={styles.primaryBtnText}>{t('menu.single')}</Text>
       </Pressable>
       <Pressable style={styles.primaryBtn} onPress={() => onPlay('pvp', matchLen)}>
-        <Text style={styles.primaryBtnText}>👥 2 Kişi (aynı telefon)</Text>
+        <Text style={styles.primaryBtnText}>{t('menu.local')}</Text>
       </Pressable>
       <View style={styles.bottomRow}>
         <Pressable style={styles.ghostBtn} onPress={() => setShowThemes(true)}>
-          <Text style={styles.ghostBtnText}>🎨 Temalar</Text>
+          <Text style={styles.ghostBtnText}>{t('menu.themes')}</Text>
         </Pressable>
         <Pressable style={styles.ghostBtn} onPress={() => setShowRules(true)}>
-          <Text style={styles.ghostBtnText}>❓ Nasıl Oynanır?</Text>
+          <Text style={styles.ghostBtnText}>{t('menu.howto')}</Text>
         </Pressable>
         <Pressable style={styles.ghostBtn} onPress={toggleMute}>
           <Text style={styles.ghostBtnText}>{profile?.muted ? '🔇' : '🔊'}</Text>
@@ -341,34 +356,35 @@ function ThemePicker({
   onTogglePro: () => void;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <View style={styles.howtoOverlay}>
-      <Text style={styles.howtoTitle}>🎨 Tahta Temaları</Text>
-      <Text style={styles.themeHint}>
-        Pro temalar üyelikle açılır. (Test için Pro'yu aç/kapa)
-      </Text>
+      <Text style={styles.howtoTitle}>{t('themes.title')}</Text>
+      <Text style={styles.themeHint}>{t('themes.hint')}</Text>
       <View style={styles.themeGrid}>
-        {THEMES.map((t) => {
-          const locked = t.pro && !isPro;
-          const isSel = t.id === selected;
+        {THEMES.map((theme) => {
+          const locked = theme.pro && !isPro;
+          const isSel = theme.id === selected;
           return (
             <Pressable
-              key={t.id}
+              key={theme.id}
               style={[
                 styles.themeCard,
                 isSel && styles.themeCardSel,
                 locked && styles.themeCardLocked,
               ]}
-              onPress={() => !locked && onSelect(t.id)}
+              onPress={() => !locked && onSelect(theme.id)}
             >
-              {t.background ? (
-                <Image source={t.background} style={styles.themeThumb} resizeMode="cover" />
+              {theme.background ? (
+                <Image source={theme.background} style={styles.themeThumb} resizeMode="cover" />
               ) : (
                 <View style={[styles.themeThumb, styles.themeThumbClassic]} />
               )}
-              <Text style={styles.themeName}>{t.name}</Text>
-              {t.pro && (
-                <Text style={styles.themeBadge}>{locked ? '🔒 PRO' : '⭐ PRO'}</Text>
+              <Text style={styles.themeName}>{t(`theme.${theme.id}`)}</Text>
+              {theme.pro && (
+                <Text style={styles.themeBadge}>
+                  {t(locked ? 'themes.proLocked' : 'themes.proUnlocked')}
+                </Text>
               )}
               {isSel && <Text style={styles.themeSelMark}>✓</Text>}
             </Pressable>
@@ -377,7 +393,7 @@ function ThemePicker({
       </View>
       <Pressable style={styles.proToggle} onPress={onTogglePro}>
         <Text style={styles.proToggleText}>
-          {isPro ? '🟢 Pro: AÇIK (test)' : '⚪ Pro: kapalı — açmak için dokun (test)'}
+          {t(isPro ? 'themes.proOn' : 'themes.proOff')}
         </Text>
       </Pressable>
       <Pressable onPress={onClose} style={styles.howtoClose} hitSlop={10}>
@@ -400,6 +416,23 @@ const styles = StyleSheet.create({
     color: colors.textDim,
     fontSize: 14,
     marginBottom: 6,
+  },
+  langBtn: {
+    position: 'absolute',
+    top: 44,
+    right: 16,
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: colors.textDim,
+    backgroundColor: '#00000044',
+    zIndex: 10,
+  },
+  langBtnText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '600',
   },
   profileCard: {
     backgroundColor: colors.frame,
