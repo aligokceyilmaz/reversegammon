@@ -10,8 +10,8 @@ import { Platform } from 'react-native';
 // TODO: AdMob panelinden gelen GERÇEK interstitial birim ID'lerini buraya yaz.
 //   iOS App ID (~'li) app.json'daki plugin ayarına; birim ID'leri (/'li) buraya.
 const REAL_INTERSTITIAL: { ios: string; android: string } = {
-  ios: '', // ör. 'ca-app-pub-XXXXXXXX/ZZZZZZZZ'
-  android: '', // ör. 'ca-app-pub-XXXXXXXX/ZZZZZZZZ'
+  ios: 'ca-app-pub-3399707041118077/5870612610',
+  android: '', // Android AdMob birim ID'si (Android'e geçince eklenecek)
 };
 
 type Ads = typeof import('react-native-google-mobile-ads');
