@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Alert,
   Image,
   Pressable,
   StyleSheet,
@@ -22,6 +23,7 @@ import {
 } from '../profile';
 import { setMuted } from '../sound';
 import type { Profile } from '../profile';
+import { initIap, buyPro, restorePro } from '../iap';
 import { useI18n, LANG_NATIVE } from '../i18n';
 import { BoardSvg } from './BoardSvg';
 import { THEMES } from './themes';
@@ -166,6 +168,8 @@ export function MenuScreen({ onPlay }: Props) {
       setNameInput(p.name);
       setAvatarInput(p.avatar);
     });
+    // Satın alma altyapısını başlat; Pro alınınca/geri yüklenince profili tazele
+    initIap(() => loadProfile().then((p) => setProfile(p)));
   }, []);
 
   async function chooseTheme(id: string) {
@@ -175,11 +179,25 @@ export function MenuScreen({ onPlay }: Props) {
     await setTheme(id);
   }
 
+  // Geliştirme (test) kısayolu: Pro'yu satın almadan aç/kapa (yalnızca __DEV__)
   async function togglePro() {
     if (!profile) return;
     const next = { ...profile, isPro: !profile.isPro };
     setProfile(next);
     await setPro(next.isPro);
+  }
+
+  // Gerçek satın alma: sonuç initIap dinleyicisine düşer, profil orada tazelenir
+  function upgradePro() {
+    buyPro();
+  }
+
+  async function handleRestore() {
+    const ok = await restorePro();
+    Alert.alert(
+      ok ? t('pro.restoredTitle') : t('pro.noneTitle'),
+      ok ? t('pro.restoredBody') : t('pro.noneBody'),
+    );
   }
 
   async function toggleMute() {
@@ -333,6 +351,8 @@ export function MenuScreen({ onPlay }: Props) {
           selected={profile.theme}
           isPro={profile.isPro}
           onSelect={chooseTheme}
+          onBuy={upgradePro}
+          onRestore={handleRestore}
           onTogglePro={togglePro}
           onClose={() => setShowThemes(false)}
         />
@@ -347,12 +367,16 @@ function ThemePicker({
   selected,
   isPro,
   onSelect,
+  onBuy,
+  onRestore,
   onTogglePro,
   onClose,
 }: {
   selected: string;
   isPro: boolean;
   onSelect: (id: string) => void;
+  onBuy: () => void;
+  onRestore: () => void;
   onTogglePro: () => void;
   onClose: () => void;
 }) {
@@ -391,11 +415,26 @@ function ThemePicker({
           );
         })}
       </View>
-      <Pressable style={styles.proToggle} onPress={onTogglePro}>
-        <Text style={styles.proToggleText}>
-          {t(isPro ? 'themes.proOn' : 'themes.proOff')}
-        </Text>
-      </Pressable>
+      {isPro ? (
+        <Text style={styles.proActive}>{t('pro.active')}</Text>
+      ) : (
+        <>
+          <Pressable style={styles.proBuyBtn} onPress={onBuy}>
+            <Text style={styles.proBuyText}>{t('pro.upgrade')}</Text>
+            <Text style={styles.proBuySub}>{t('pro.upgradeSub')}</Text>
+          </Pressable>
+          <Pressable onPress={onRestore} hitSlop={8}>
+            <Text style={styles.proRestore}>{t('pro.restore')}</Text>
+          </Pressable>
+        </>
+      )}
+      {__DEV__ && (
+        <Pressable style={styles.proToggle} onPress={onTogglePro}>
+          <Text style={styles.proToggleText}>
+            {t(isPro ? 'themes.proOn' : 'themes.proOff')}
+          </Text>
+        </Pressable>
+      )}
       <Pressable onPress={onClose} style={styles.howtoClose} hitSlop={10}>
         <Text style={styles.howtoCloseText}>✕</Text>
       </Pressable>
@@ -628,6 +667,41 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontSize: 18,
     fontWeight: '900',
+  },
+  proActive: {
+    marginTop: 14,
+    color: colors.accent,
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+    maxWidth: 320,
+  },
+  proBuyBtn: {
+    marginTop: 14,
+    backgroundColor: colors.brass,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFE9A6',
+  },
+  proBuyText: {
+    color: '#33200F',
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  proBuySub: {
+    color: '#33200F',
+    fontSize: 12,
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  proRestore: {
+    marginTop: 10,
+    color: colors.textDim,
+    fontSize: 13,
+    textDecorationLine: 'underline',
   },
   proToggle: {
     marginTop: 14,
