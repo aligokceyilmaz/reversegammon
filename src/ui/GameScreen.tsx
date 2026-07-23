@@ -25,6 +25,7 @@ import {
 import type { DestOption, GameState, Move, MoveSource, Player } from '../engine';
 import { chooseMove } from '../engine/ai';
 import { play } from '../sound';
+import { showInterstitial } from '../ads';
 import { loadProfile, recordAiResult, recordOnlineResult } from '../profile';
 import {
   abandonGame,
@@ -137,6 +138,8 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
   const [profileName, setProfileName] = useState('');
   const [profileAvatar, setProfileAvatar] = useState('');
   const [themeId, setThemeId] = useState('classic');
+  /** Pro üye mi? (reklamlar Pro'da gösterilmez) */
+  const [isPro, setIsPro] = useState(false);
   /** Tur süresi geri sayımı */
   const [timeLeft, setTimeLeft] = useState(TURN_SECONDS);
   /** Oyun duraklatıldı mı? (süre ve AI durur) */
@@ -146,6 +149,7 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
     loadProfile().then((p) => {
       setProfileName(p.name);
       setProfileAvatar(p.avatar);
+      setIsPro(p.isPro);
       // Pro değilse seçili tema kilitliyse klasiğe düş
       const th = getTheme(p.theme);
       setThemeId(th.pro && !p.isPro ? 'classic' : th.id);
@@ -700,12 +704,14 @@ export function GameScreen({ mode, matchLen, online, onExit }: Props) {
 
   /** Serideki bir sonraki oyuna geç */
   function nextGame() {
+    if (!isPro) showInterstitial();
     setGameNo((n) => n + 1);
     resetBoard();
   }
 
   /** Yeni seri başlat */
   function newSeries() {
+    if (!isPro) showInterstitial();
     setSeries([0, 0]);
     setGameNo(1);
     resetBoard();

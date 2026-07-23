@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { loadProfile } from './src/profile';
 import { initSound } from './src/sound';
+import { initAds } from './src/ads';
 import { I18nProvider } from './src/i18n';
 import { GameScreen } from './src/ui/GameScreen';
 import type { GameMode, OnlineCtx } from './src/ui/GameScreen';
@@ -19,6 +20,7 @@ export default function App() {
 
   useEffect(() => {
     loadProfile().then((p) => initSound(p.muted));
+    initAds();
   }, []);
 
   return (
