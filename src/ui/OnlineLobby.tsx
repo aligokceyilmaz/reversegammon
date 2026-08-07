@@ -17,11 +17,12 @@ export function OnlineLobby({ onMatched, onCancel }: Props) {
   const { t } = useI18n();
   const [status, setStatus] = useState(t('online.connecting'));
   const [seconds, setSeconds] = useState(0);
+  const [errored, setErrored] = useState(false);
   const cancelRef = useRef({ cancelled: false });
 
   useEffect(() => {
     const cancel = cancelRef.current;
-    let iv: ReturnType<typeof setInterval>;
+    let iv: ReturnType<typeof setInterval> | undefined;
     (async () => {
       try {
         const uid = await ensureSignedIn();
@@ -37,14 +38,11 @@ export function OnlineLobby({ onMatched, onCancel }: Props) {
         if (cancel.cancelled || !result) return;
         // Rakibin gerçek adı/avatarı ilk snapshot'ta GameScreen'de güncellenir.
         onMatched(result, { uid: '', name: t('game.opponent'), avatar: '🙂' }, uid);
-      } catch (e: unknown) {
-        const err = e as { code?: string; message?: string };
-        setStatus(
-          t('online.error', {
-            code: err.code || '',
-            msg: err.message || String(e),
-          }).trim(),
-        );
+      } catch {
+        if (cancel.cancelled) return;
+        if (iv) clearInterval(iv);
+        setErrored(true);
+        setStatus(t('online.offline'));
       }
     })();
     return () => {
@@ -56,9 +54,15 @@ export function OnlineLobby({ onMatched, onCancel }: Props) {
   return (
     <View style={styles.root}>
       <Text style={styles.title}>{t('online.title')}</Text>
-      <ActivityIndicator size="large" color={colors.accent} style={{ marginVertical: 20 }} />
+      {!errored && (
+        <ActivityIndicator
+          size="large"
+          color={colors.accent}
+          style={{ marginVertical: 20 }}
+        />
+      )}
       <Text style={styles.status}>{status}</Text>
-      <Text style={styles.timer}>{t('game.seconds', { n: seconds })}</Text>
+      {!errored && <Text style={styles.timer}>{t('game.seconds', { n: seconds })}</Text>}
       <Pressable
         style={styles.cancelBtn}
         onPress={() => {
@@ -66,7 +70,7 @@ export function OnlineLobby({ onMatched, onCancel }: Props) {
           onCancel();
         }}
       >
-        <Text style={styles.cancelText}>{t('online.cancel')}</Text>
+        <Text style={styles.cancelText}>{errored ? t('online.back') : t('online.cancel')}</Text>
       </Pressable>
     </View>
   );

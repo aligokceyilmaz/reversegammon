@@ -151,6 +151,8 @@ const en: Dict = {
   'online.title': '🌍 Online',
   'online.cancel': 'Cancel',
   'online.error': 'Error: {code} {msg}',
+  'online.offline': 'Couldn’t connect. Check your internet connection and try again.',
+  'online.back': 'Back',
   'player.default': 'Player',
 };
 
@@ -280,6 +282,8 @@ const tr: Dict = {
   'online.title': '🌍 Online',
   'online.cancel': 'İptal',
   'online.error': 'Hata: {code} {msg}',
+  'online.offline': 'Bağlanılamadı. İnternet bağlantını kontrol edip tekrar dene.',
+  'online.back': 'Geri',
   'player.default': 'Oyuncu',
 };
 

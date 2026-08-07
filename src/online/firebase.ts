@@ -17,16 +17,33 @@ const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
-/** Anonim giriş yapar ve kullanıcı kimliğini (uid) döndürür */
-export function ensureSignedIn(): Promise<string> {
+/**
+ * Anonim giriş yapar ve kullanıcı kimliğini (uid) döndürür.
+ * Kısıtlı ağlarda (ör. Apple inceleme ortamı) bağlantı asılı kalmasın diye
+ * zaman aşımı vardır; süre dolarsa hata fırlatır (sonsuz "Bağlanıyor" olmaz).
+ */
+export function ensureSignedIn(timeoutMs = 12000): Promise<string> {
   return new Promise((resolve, reject) => {
+    let done = false;
+    let timer: ReturnType<typeof setTimeout>;
     const unsub = onAuthStateChanged(auth, (user) => {
-      if (user) {
+      if (user && !done) {
+        done = true;
+        clearTimeout(timer);
         unsub();
         resolve(user.uid);
       }
     });
+    timer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      unsub();
+      reject(new Error('timeout'));
+    }, timeoutMs);
     signInAnonymously(auth).catch((e) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
       unsub();
       reject(e);
     });

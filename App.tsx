@@ -20,7 +20,10 @@ export default function App() {
 
   useEffect(() => {
     loadProfile().then((p) => initSound(p.muted));
-    initAds();
+    // Reklam SDK'sını açılıştan birkaç saniye sonra başlat: soğuk açılışı
+    // (ve inceleme ortamındaki ağ beklemesini) etkilemesin.
+    const adTimer = setTimeout(() => initAds(), 3000);
+    return () => clearTimeout(adTimer);
   }, []);
 
   return (
