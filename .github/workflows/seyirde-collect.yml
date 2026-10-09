@@ -1,0 +1,66 @@
+name: seyirde — YouTube verisi topla
+
+on:
+  schedule:
+    # 10:00 UTC = 03:00 Pasifik. YouTube Analytics gunleri kanal saat diliminde
+    # (varsayilan PT) kapaniyor; bu saatte "dun" kesin tamamlanmis oluyor.
+    - cron: '0 10 * * *'
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'Kac gun geriye tazelensin'
+        required: false
+        default: '14'
+
+# Ayni anda iki kosu commit yarisina girmesin.
+concurrency:
+  group: seyirde-collect
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Veriyi topla
+        env:
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+        run: node seyirde/scripts/collect.mjs --days "${{ inputs.days || '14' }}"
+
+      - name: Ozeti is kaydina yaz
+        if: always()
+        run: |
+          {
+            echo '## seyirde'
+            echo '```'
+            node seyirde/scripts/report.mjs --days 28 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Degisikligi commit et
+        run: |
+          git config user.name  'seyirde-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add seyirde/data
+          if git diff --cached --quiet; then
+            echo 'Veri degismedi, commit atlandi.'
+            exit 0
+          fi
+          git commit -m "seyirde: $(date -u +%Y-%m-%d) verisi"
+          # Baska bir kosu araya girdiyse tekrar dene.
+          for i in 1 2 3 4; do
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && \
+              git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            echo "push basarisiz, ${i}. deneme"
+            sleep $((2 ** i))
+          done
+          exit 1
