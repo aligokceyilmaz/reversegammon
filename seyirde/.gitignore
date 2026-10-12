@@ -1,5 +1,0 @@
-# Yerel credential'lar. Bunlar asla commit edilmez; CI tarafinda GitHub
-# repo Secrets'tan ortam degiskeni olarak geliyor.
-.env
-.env.*
-*.token
