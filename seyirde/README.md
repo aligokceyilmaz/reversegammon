@@ -28,77 +28,92 @@ kadar erken koşarsan o kadar uzun CTR geçmişine sahip olursun. İlk rapor
 
 ## Kurulum
 
-Bir kerelik, ~30 dakika. 1-6. adımlar senin bilgisayarında.
+Bir kerelik, ~30 dakika. 1-6. adımlar senin bilgisayarında, tarayıcıda.
 
-### 1. Google Cloud projesi
+### 1. Google Cloud projesi aç
 
-https://console.cloud.google.com → üstteki proje seçiciden **New Project** →
-isim: `seyirde` → Create.
+→ https://console.cloud.google.com/projectcreate
+
+İsim: `seyirde` → **Create**. Sonraki adımlarda bu projenin seçili olduğundan
+emin ol (üstteki proje seçici).
 
 ### 2. Üç API'yi etkinleştir
 
-**APIs & Services → Library**'de sırayla ara ve her birinde **Enable**:
+Her linkte **Enable** / **Etkinleştir** butonuna bas:
 
-- `YouTube Data API v3`
-- `YouTube Analytics API`
-- `YouTube Reporting API`
+- YouTube Data API v3 → https://console.cloud.google.com/apis/library/youtube.googleapis.com
+- YouTube Analytics API → https://console.cloud.google.com/apis/library/youtubeanalytics.googleapis.com
+- YouTube Reporting API → https://console.cloud.google.com/apis/library/youtubereporting.googleapis.com
 
-Üçü de şart. Reporting'i atlarsan CTR gelmez.
+Üçü de şart. Reporting'i atlarsan CTR ve gösterim verisi hiç gelmez.
 
-### 3. OAuth consent screen
+### 3. OAuth izin ekranını kur
 
-**APIs & Services → OAuth consent screen**:
+→ https://console.cloud.google.com/auth/overview
 
-- User Type: **External** → Create
-- App name: `seyirde`, support email: kendi adresin
-- Scopes ekranında **Add or remove scopes** → şu ikisini seç:
+Google bu bölümü **"Google Auth Platform"** olarak yeniden adlandırdı. Eski
+"OAuth consent screen" linkini görürsen
+(https://console.cloud.google.com/apis/credentials/consent) buraya yönlendirir.
+
+- **Branding**: App name `seyirde`, destek e-postası kendi adresin
+- **Audience** → User type: **External**
+- **Data Access** → *Add or remove scopes* → şu ikisini seç:
   - `.../auth/youtube.readonly`
   - `.../auth/yt-analytics.readonly`
-- Test users: kendi Google hesabını ekle
 
-### 4. "Production"a al — bu adımı atlama
+### 4. Uygulamayı "In production"a al — BU ADIMI ATLAMA
 
-Consent screen ekranında **Publish app** → Confirm.
+→ https://console.cloud.google.com/auth/audience
 
-**Neden kritik:** Uygulama "Testing" durumunda kalırsa Google'ın verdiği
-refresh token **7 gün sonra ölür** ve sistem sessizce durur. Bir gün
-`invalid_grant` hatası görürsün ve veri akışı çoktan kesilmiş olur.
-Production'da bu süre sınırı yok.
+Publishing status altında **Publish app** → Confirm. Durum
+`Testing` → `In production` olmalı.
 
-Doğrulanmamış uygulama olduğu için izin verirken bir uyarı ekranı çıkacak.
-Sadece sen kendi hesabınla kullandığın için sorun değil — Google doğrulaması
-yalnızca başka kullanıcılara dağıtacaksan gerekiyor.
+**Neden kritik:** "Testing" durumunda Google'ın verdiği refresh token
+**7 gün sonra ölür** ve sistem sessizce durur. Bir gün `invalid_grant`
+hatası görürsün, ama veri akışı haftalar önce kesilmiş olur.
+"In production"da bu süre sınırı yok.
+
+Doğrulanmamış uygulama olduğu için izin verirken bir uyarı ekranı çıkacak;
+sadece kendi hesabınla kullandığın için sorun değil. Google doğrulaması
+yalnızca uygulamayı başka kullanıcılara dağıtacaksan gerekiyor.
 
 ### 5. OAuth client oluştur
 
-**APIs & Services → Credentials → Create Credentials → OAuth client ID**:
+→ https://console.cloud.google.com/auth/clients
 
-- Application type: **Desktop app** (loopback yönlendirmesine izin verdiği
-  için; Web application seçersen redirect URI'yi elle kaydetmen gerekir)
-- Name: `seyirde-local` → Create
+**Create client**:
+
+- Application type: **Desktop app** — loopback yönlendirmesine izin verdiği
+  için. "Web application" seçersen redirect URI'yi elle kaydetmen gerekir.
+- Name: `seyirde-local` → **Create**
 
 Çıkan **Client ID** ve **Client Secret**'ı kopyala.
 
 ### 6. Refresh token üret
 
-Depoyu kendi bilgisayarına klonla ve:
+Depoyu kendi bilgisayarına klonla, bu dala geç ve çalıştır:
 
 ```bash
+git clone https://github.com/aligokceyilmaz/reversegammon.git
+cd reversegammon
+git checkout claude/gifted-dijkstra-3qyipe
+
 YT_CLIENT_ID='....apps.googleusercontent.com' \
 YT_CLIENT_SECRET='GOCSPX-...' \
 node seyirde/scripts/get-refresh-token.mjs
 ```
 
-Terminalde çıkan adresi tarayıcıda aç, kanalın sahibi hesapla giriş yap,
-uyarı ekranında **Advanced → Go to seyirde (unsafe)** ile devam et. İzin
-verince terminale refresh token basılır.
+Terminalde çıkan adresi tarayıcıda aç, **kanalın sahibi** Google hesabıyla
+giriş yap. Uyarı ekranında *Advanced* → *Go to seyirde (unsafe)* ile devam et.
+İzin verince refresh token terminale basılır.
 
-Bu değeri dosyaya yazıp commit etme.
+Bu değeri hiçbir dosyaya yazıp commit etme.
 
-### 7. GitHub Secrets
+### 7. GitHub Secrets'a üç değeri gir
 
-Depo sayfası → **Settings → Secrets and variables → Actions → New repository
-secret**. Üç tane ekle:
+→ https://github.com/aligokceyilmaz/reversegammon/settings/secrets/actions
+
+**New repository secret** ile üç tane ekle:
 
 | Secret adı | Değer |
 |---|---|
@@ -106,32 +121,53 @@ secret**. Üç tane ekle:
 | `YT_CLIENT_SECRET` | 5. adımdaki Client Secret |
 | `YT_REFRESH_TOKEN` | 6. adımda basılan token |
 
-Bunlar sadece Actions'ın göreceği şifreli değerler; depoya yazılmaz, log'a
-basılmaz ve sohbete yapıştırman gerekmez.
+Bunlar şifreli saklanır, depoya yazılmaz, Actions log'una basılmaz.
 
-### 8. Reach job'larını kaydet — en erken fırsatta
+### 8. Reach job'larını kaydet — EN ERKEN FIRSATTA
 
-CTR geçmişi bu adımdan itibaren birikmeye başlar, geriye dönük alınamaz.
-
-Yerelden:
+CTR geçmişi bu adımdan itibaren birikmeye başlar ve **geriye dönük
+alınamaz**. Bugün koşarsan bugünden itibaren verin olur; bir ay beklersen
+bir ay kaybedersin.
 
 ```bash
 YT_CLIENT_ID='...' YT_CLIENT_SECRET='...' YT_REFRESH_TOKEN='...' \
   node seyirde/scripts/setup-reach-jobs.mjs
 ```
 
-### 9. İlk toplamayı çalıştır
+### 9. Geçmişi geriye dönük çek
 
-Actions sekmesi → **seyirde — YouTube verisi topla** → **Run workflow**.
-Analytics geçmişinin tamamını almak için ilk koşuyu geriye dönük yap:
+Analytics verisi (izlenme, retention, trafik) kanalın başından beri
+alınabiliyor. Bir kez yerelden:
 
 ```bash
-# yerelden, kanalın ilk gününden bugüne
 node seyirde/scripts/collect.mjs --backfill
+git add seyirde/data && git commit -m "seyirde: gecmis veri" && git push
 ```
 
-Sonrasında cron her gün 10:00 UTC'de son 14 günü tazeler ve değişiklik varsa
-commit atar.
+### 10. Workflow'u varsayılan dala taşı — yoksa cron hiç çalışmaz
+
+GitHub'da zamanlanmış workflow'lar **yalnızca deponun varsayılan dalındaki**
+dosyadan çalışır. `workflow_dispatch` ("Run workflow" butonu) da workflow
+dosyasının varsayılan dalda bulunmasını gerektirir.
+
+Bu deponun varsayılan dalı şu an `claude/tavla-game-rules-nnhd7x`. Yani
+`seyirde` dalı birleştirilmeden otomatik toplama **başlamaz**. İki seçenek:
+
+- **Birleştir** (önerilen): https://github.com/aligokceyilmaz/reversegammon/compare/claude/tavla-game-rules-nnhd7x...claude/gifted-dijkstra-3qyipe
+- Ya da varsayılan dalı değiştir:
+  https://github.com/aligokceyilmaz/reversegammon/settings/branches
+
+Birleştirdikten sonra ilk koşuyu elle tetikle:
+https://github.com/aligokceyilmaz/reversegammon/actions/workflows/seyirde-collect.yml
+
+Sonrasında her gün 10:00 UTC'de kendi çalışır.
+
+### İşe yarayan diğer linkler
+
+- Google hesabının uygulama izinleri (token sıfırlamak için):
+  https://myaccount.google.com/permissions
+- API kota kullanımı: https://console.cloud.google.com/apis/dashboard
+- YouTube Studio analytics (elle CSV export için): https://studio.youtube.com
 
 ---
 
